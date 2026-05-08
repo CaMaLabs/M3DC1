@@ -474,33 +474,33 @@ call PetscLogStagePop(jer)
 call PetscLogStagePush(stageA,jer)
 #ifdef VERSION1
     if(mod(ntime,pskip)==0) then
-        if(myrank.eq.0) print *, " clear_mat s1_mat",ntime, s1_mat%imatrix
+        if(myrank.eq.0) print *, " clear_mat s1_mat",ntime
     call clear_mat(s1_mat)
     else
-        if(myrank.eq.0) print *, " zero_mat  s1_mat",ntime, s1_mat%imatrix
+        if(myrank.eq.0) print *, " zero_mat  s1_mat",ntime
         call zero_mat(s1_mat)
     endif
 #else
     if(pskip==0) then
             !orgin solve option: kspSet=1, with KSP Object completely destroyed after each solve
-            if(myrank.eq.0) print *, " clear_mat s1_mat",ntime, s1_mat%imatrix
+            if(myrank.eq.0) print *, " clear_mat s1_mat",ntime
             call clear_mat(s1_mat)
     else if(pskip==1) then
             !default
             !third solve option: kspSet=3, similar to pskip>1, 
             !update both A&P contents at every timestep, but no KSP Object destroyed after each solve
             !to save memory usage and solve setup time.
-            if(myrank.eq.0) print *, " update_mat s1_mat",ntime, s1_mat%imatrix
+            if(myrank.eq.0) print *, " update_mat s1_mat",ntime
             call update_mat(s1_mat)
 
     else !pskip>1
             !second solve option: kspSet=2, 
             !update A content only at every timestep, update P every 'pskip' number of timesteps. 
             if(mod(ntime,pskip)==0) then
-                    if(myrank.eq.0) print *, " update_mat s1_mat",ntime, s1_mat%imatrix 
+                    if(myrank.eq.0) print *, " update_mat s1_mat",ntime
                     call update_mat(s1_mat)
             else
-                    if(myrank.eq.0) print *, " zero_mat s1_mat",ntime, s1_mat%imatrix 
+                    if(myrank.eq.0) print *, " zero_mat s1_mat",ntime
                     call zero_mat(s1_mat)
             end if
     endif
@@ -1542,7 +1542,9 @@ subroutine subtract_axi
     enddo
 
     call finalize(axi%vec)
+#ifndef USEPETSC
     call m3dc1_field_sum_plane(axi%vec%id)
+#endif
 
     do  icounter_t=1,numnodes
         l = nodes_owned(icounter_t)
@@ -1561,7 +1563,9 @@ subroutine subtract_axi
     enddo
 
     call finalize(axi%vec)
+#ifndef USEPETSC
     call m3dc1_field_sum_plane(axi%vec%id)
+#endif
 
     do  icounter_t=1,numnodes
         l = nodes_owned(icounter_t)
@@ -1580,7 +1584,9 @@ subroutine subtract_axi
     enddo
 
     call finalize(axi%vec)
+#ifndef USEPETSC
     call m3dc1_field_sum_plane(axi%vec%id)
+#endif
 
     do  icounter_t=1,numnodes
         l = nodes_owned(icounter_t)

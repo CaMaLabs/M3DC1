@@ -42,7 +42,6 @@ set(SCOREC_LIB_NAMES
   ma
   mds
   apf_sim
-  apf_zoltan
   apf
   parma
   gmi
@@ -53,16 +52,13 @@ set(SCOREC_LIB_NAMES
   spr
   crv
   lion
-  ph 
   )
 else()
 set(SCOREC_LIB_NAMES
 crv
-ph
 sam
 spr
 ma
-apf_zoltan
 parma
 mds
 apf
@@ -71,6 +67,9 @@ mth
 gmi
 pcu
   )
+endif()
+if(ENABLE_ZOLTAN)
+  list(APPEND SCOREC_LIB_NAMES apf_zoltan)
 endif()
 scorecLibCheck("${SCOREC_LIB_NAMES}" TRUE)
 
@@ -111,4 +110,3 @@ configure_file(
   @ONLY)
 
 INSTALL(FILES "${CMAKE_BINARY_DIR}/libScorec.pc" DESTINATION lib/pkgconfig)
-

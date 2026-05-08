@@ -154,6 +154,16 @@ subroutine init_perturbations
 
   ifield = FIELD_PSI + FIELD_P + FIELD_KIN
 
+  if(eps.eq.0.) then
+     psi_field(1) = psi_vec
+     u_field(1) = phi_vec
+     call destroy_field(psi_vec)
+     call destroy_field(phi_vec)
+     if(myrank.eq.0 .and. iprint.ge.1) &
+          print *, 'Skipping initial perturbations (eps=0)'
+     return
+  end if
+
   numelms = local_elements()
 
   if(myrank.eq.0 .and. iprint.ge.1) print *, 'Defining initial perturbations'
@@ -211,12 +221,16 @@ subroutine init_perturbations
   end do
 
   ! do solves
+  if(myrank.eq.0 .and. iprint.ge.1) print *, '  solving psi perturbation...'
   call newvar_solve(psi_vec%vec,mass_mat_lhs)
+  if(myrank.eq.0 .and. iprint.ge.1) print *, '  done solving psi perturbation'
   psi_field(1) = psi_vec
 
   ! use dirichlet boundary conditions to avoid perturbations on boundary
 !  call newvar_solve(phi_vec%vec,mass_mat_lhs_dc)
+  if(myrank.eq.0 .and. iprint.ge.1) print *, '  solving phi perturbation...'
   call newvar_solve(phi_vec%vec,mass_mat_lhs)
+  if(myrank.eq.0 .and. iprint.ge.1) print *, '  done solving phi perturbation'
   u_field(1) = phi_vec
 
   call destroy_field(psi_vec)
@@ -673,13 +687,13 @@ subroutine nre_eq
   use arrays
   use diagnostics
   use math
+  use mpi
   use mesh_mod
   use m3dc1_nint
   use newvar_mod
   use pellet
 
   implicit none
-  include 'mpif.h'
 
   type(field_type) :: nre_vec
   integer :: itri, numelms, def_fields

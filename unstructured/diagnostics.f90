@@ -6,6 +6,8 @@
 
 
 module diagnostics
+  use mpi
+  use mesh_mod
 
   implicit none
 
@@ -129,7 +131,7 @@ contains
 
     implicit none
 
-    include 'mpif.h'
+    ! MPI symbols are provided by module diagnostics (`use mpi`)
     integer :: ier
     integer, parameter :: num_scalars = 14
     real, dimension(num_scalars) :: vin, vout
@@ -296,7 +298,7 @@ contains
 
     implicit none
 
-    include 'mpif.h'
+    ! MPI symbols are provided by module diagnostics (`use mpi`)
 
     integer, parameter :: num_scalars = 82
     integer :: ier
@@ -509,7 +511,7 @@ subroutine evaluate(x,phi,z,ans,fin,itri,ierr)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   integer, intent(inout) :: itri
   real, intent(in) :: x, phi, z
@@ -725,7 +727,7 @@ subroutine calculate_scalars()
 
   implicit none
  
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   integer :: itri, numelms, def_fields, ier
   integer :: is_edge(3)  ! is inode on boundary
@@ -1205,7 +1207,7 @@ subroutine calculate_Lor_vol()
 
   implicit none
  
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   integer :: itri, numelms, ier
   integer :: is_edge(3)  ! is inode on boundary
@@ -1365,7 +1367,7 @@ subroutine magaxis(xguess,zguess,psi,psim,imethod,ier)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   real, intent(inout) :: xguess, zguess
   type(field_type), intent(in) :: psi
@@ -1576,7 +1578,7 @@ subroutine te_max(xguess,zguess,te,tem,imethod,ier)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   real, intent(inout) :: xguess, zguess
   type(field_type), intent(in) :: te
@@ -1599,6 +1601,11 @@ subroutine te_max(xguess,zguess,te,tem,imethod,ier)
   vectype, dimension(coeffs_per_element) :: avector
   real, dimension(5) :: temp1, temp2
   integer :: itri
+
+  if(xguess.ne.xguess .or. zguess.ne.zguess) then
+     xguess = 1.
+     zguess = 0.
+  end if
 
   if(myrank.eq.0 .and. iprint.ge.2) &
        write(*,'(A,2E12.4)') '  te_max: guess = ', xguess, zguess
@@ -1777,7 +1784,7 @@ subroutine te_max2(xguess,zguess,te,tem,imethod,ier)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   real, intent(inout) :: xguess, zguess
   type(field_type), intent(in) :: te
@@ -1836,7 +1843,7 @@ subroutine te_max3(xguess,zguess,te,tem,imethod,ier)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   real, intent(inout) :: xguess, zguess
   type(field_type), intent(in) :: te
@@ -1971,7 +1978,7 @@ subroutine te_max4(te,tem,ilin,ier)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   type(field_type), intent(in) :: te
   integer, intent(in) :: ilin
@@ -2038,7 +2045,7 @@ subroutine lcfs(psi, test_wall, findx)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   type(field_type), intent(in) :: psi
   logical, intent(in), optional :: test_wall
@@ -2073,6 +2080,10 @@ subroutine lcfs(psi, test_wall, findx)
   ! Find magnetic axis
   ! ~~~~~~~~~~~~~~~~~~
   if(myrank.eq.0 .and. iprint.ge.1) print *, ' Finding magnetic axis.  FX = ', fx
+  if(xmag.ne.xmag .or. zmag.ne.zmag) then
+     xmag = 1.
+     zmag = 0.
+  end if
   call magaxis(xmag,zmag,temp_field,psim,0,ier)
   if(ier.eq.0) then
      psimin = psim
@@ -2082,6 +2093,13 @@ subroutine lcfs(psi, test_wall, findx)
         write(*,'(A, E12.4)') '  psi at magnetic axis: ', psimin
      end if
   else
+     if(xmag.ne.xmag .or. zmag.ne.zmag) then
+        xmag = 1.
+        zmag = 0.
+     end if
+     itri = 0
+     call evaluate(xmag,0.,zmag,dum1,temp_field,itri,ier)
+     if(ier.eq.0) psimin = dum1(OP_1)
      if(myrank.eq.0 .and. iprint.ge.1) then 
         write(*,'(A,2E12.4)') '  no magnetic axis found near ', xmag, zmag
      end if
@@ -2368,7 +2386,7 @@ subroutine calculate_ke()
   use math
 
   implicit none
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
   integer :: itri, numelms, def_fields
   real :: ke_N, ketotal, fac
   integer :: ier, k, l, numnodes, N, icounter_t
@@ -2483,7 +2501,9 @@ subroutine calculate_ke()
         call set_node_data(u_transformc,l,vec_l)
      enddo
      call finalize(u_transformc%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(u_transformc%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
 
      
      !eq 12: U sin
@@ -2509,7 +2529,9 @@ subroutine calculate_ke()
         call set_node_data(u_transforms,l,vec_l)
      enddo
      call finalize(u_transforms%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(u_transforms%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
 
 
      !eq 12: omega cos
@@ -2535,7 +2557,9 @@ subroutine calculate_ke()
         call set_node_data(vz_transformc,l,vec_l)
      enddo
      call finalize(vz_transformc%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(vz_transformc%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
 
 
      !eq 12: omega sin
@@ -2561,7 +2585,9 @@ subroutine calculate_ke()
         call set_node_data(vz_transforms,l,vec_l)
      enddo
      call finalize(vz_transforms%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(vz_transforms%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
 
 
      !eq 12: chi cos
@@ -2587,7 +2613,9 @@ subroutine calculate_ke()
         call set_node_data(chi_transformc,l,vec_l)
      enddo
      call finalize(chi_transformc%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(chi_transformc%vec%id) ! sum vec%datator of size 6 at each (R,Z) node over k
+#endif
      
 
      ! eq 12: chi sin
@@ -2613,7 +2641,9 @@ subroutine calculate_ke()
         call set_node_data(chi_transforms,l,vec_l)
      enddo
      call finalize(chi_transforms%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(chi_transforms%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
      
 
      !eq 4b: Calculate energy for each Fourier Harminics N
@@ -2735,7 +2765,7 @@ subroutine calculate_bh()
   use boundary_conditions
   use math
   implicit none
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
   integer :: itri, numelms, def_fields
   real:: bh_N, bhtotal, fac
   integer :: ier, k, l, numnodes, N, icounter_t
@@ -2851,7 +2881,9 @@ subroutine calculate_bh()
         call set_node_data(psi_transformc,l,vec_l)
      enddo
      call finalize(psi_transformc%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(psi_transformc%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
      
      !eq 12: psi sin
      do icounter_t=1,numnodes
@@ -2880,7 +2912,9 @@ subroutine calculate_bh()
         call set_node_data(psi_transforms,l,vec_l)
      enddo
      call finalize(psi_transforms%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(psi_transforms%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
 
      !eq 12: F cos
      do icounter_t=1,numnodes
@@ -2905,7 +2939,9 @@ subroutine calculate_bh()
         call set_node_data(F_transformc,l,vec_l)
      enddo
      call finalize(F_transformc%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(F_transformc%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
 
 
      !eq 12: F sin
@@ -2931,7 +2967,9 @@ subroutine calculate_bh()
         call set_node_data(F_transforms,l,vec_l)
      enddo
      call finalize(F_transforms%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(F_transforms%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
      
      !eq 12: f' cos
      do icounter_t=1,numnodes
@@ -2956,7 +2994,9 @@ subroutine calculate_bh()
         call set_node_data(fp_transformc,l,vec_l)
      enddo
      call finalize(fp_transformc%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(fp_transformc%vec%id) ! sum vec%datator of size 6 at each (R,Z) node over k
+#endif
      
      ! eq 12: f' sin
      do icounter_t=1,numnodes
@@ -2981,7 +3021,9 @@ subroutine calculate_bh()
         call set_node_data(fp_transforms,l,vec_l)
      enddo
      call finalize(fp_transforms%vec)
+#ifndef USEPETSC
      call m3dc1_field_sum_plane(fp_transforms%vec%id) ! sum vec%datator at each (R,Z) node over k
+#endif
      
      
      !eq 4b: Calculate energy for each Fourier Harminics N
@@ -3216,7 +3258,7 @@ subroutine te_max_dev(xguess,zguess,te,tem,imethod,ier)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   real, intent(inout) :: xguess, zguess
   type(field_type), intent(in) :: te
@@ -3426,8 +3468,8 @@ end subroutine te_max_dev
           end if
 
           mag_probe_val(i) = mag_probe_val(i) &
-               + mag_probe_nx(i)*val(OP_DRP) &
-               + mag_probe_nz(i)*val(OP_DZP)
+               + mag_probe_nx(i)*val(OP_DR) &
+               + mag_probe_nz(i)*val(OP_DZ)
 #endif
        end if
        
@@ -3490,7 +3532,7 @@ subroutine phi_int(x,z,ans,fin,itri,ierr)
 
   implicit none
 
-  include 'mpif.h'
+  ! MPI symbols are provided by module diagnostics (`use mpi`)
 
   integer, intent(inout) :: itri
   real, intent(in) :: x, z
@@ -3601,3 +3643,14 @@ end subroutine phi_int
 
   
 end module diagnostics
+
+! Legacy external entry points expected by older call sites.
+subroutine reset_scalars()
+  use diagnostics, only: reset_scalars_mod => reset_scalars
+  call reset_scalars_mod()
+end subroutine reset_scalars
+
+subroutine reset_itris()
+  use diagnostics, only: reset_itris_mod => reset_itris
+  call reset_itris_mod()
+end subroutine reset_itris

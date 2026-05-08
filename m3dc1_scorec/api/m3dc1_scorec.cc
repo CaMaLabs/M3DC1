@@ -19,6 +19,7 @@
 #include <gmi_analytic.h>
 #include <map>
 #include <cstring>
+#include <cctype>
 #include <iomanip> // setprecision
 #include <fstream> // file input
 #include "apfMDS.h"
@@ -38,6 +39,11 @@
 #include "lionPrint.h"
 
 const int dofNode = C1TRIDOFNODE;
+
+static inline pcu::PCU* m3dc1_current_pcu()
+{
+  return static_cast<pcu::PCU*>(m3dc1_pcu_legacy_handle().ptr);
+}
 
 #ifdef DEBUG
 static const char* get_field_name_from_id(const FieldID id)
@@ -554,7 +560,7 @@ static apf::Field* compute_multiplane_size_field(const MultiField& pfields, doub
 
   for (int i = 0; i < np; i++) {
     apf::Field* ip = get_ip_field(m, pfields[i]);
-    apf::Field* size = spr::getSPRSizeField(ip, ar);
+    apf::Field* size = spr::getSPRSizeField(ip, ar, m3dc1_current_pcu());
     char szname[128];
     sprintf(szname, "sz_%s", apf::getName(pfields[i]));
     apf::Field* sz = apf::createField(m, szname, apf::SCALAR, apf::getShape(size));
@@ -723,7 +729,7 @@ bool m3dc1_double_isequal(double A, double B)
 int m3dc1_scorec_init()
 //*******************************************************
 { 
-  pumi_start();
+  pumi_load_pcu(m3dc1_current_pcu());
   begin_time=MPI_Wtime();
   return M3DC1_SUCCESS; 
 }
@@ -756,7 +762,6 @@ int m3dc1_scorec_finalize()
 
   if (!pumi_rank()) 
     std::cout<<"\n* [M3D-C1 INFO] run time: "<<MPI_Wtime()-begin_time<<" (sec)\n";
-  pumi_finalize();
   return M3DC1_SUCCESS; 
 }
 
@@ -870,22 +875,68 @@ int m3dc1_model_getmaxcoord(double* x_max, double* y_max)
 int m3dc1_model_load(char* /* in */ model_file)
 //*******************************************************
 {  
-  FILE *test_in = fopen (model_file,"r");
-  if (!test_in)
+  std::string modelName(model_file);
+  bool isMeshModel = false;
+  bool isNullModel = false;
+  if (modelName.size() >= 4)
   {
-    if (!PCU_Comm_Self()) 
-      std::cout<<"[M3D-C1 ERROR] "<<__func__<<" failed: model file \""<<model_file<<"\" doesn't exist\n";
-    return M3DC1_FAILURE; 
+    std::string ext = modelName.substr(modelName.size() - 4);
+    for (size_t i = 0; i < ext.size(); ++i)
+      ext[i] = std::tolower(ext[i]);
+    isMeshModel = (ext == ".dmg");
+    isNullModel = (ext == "null"); // ".null" suffix
+  }
+
+  if (!isNullModel)
+  {
+    FILE *test_in = fopen(model_file, "r");
+    if (!test_in)
+    {
+      if (!PCU_Comm_Self())
+        std::cout << "[M3D-C1 ERROR] " << __func__ << " failed: model file \"" << model_file << "\" doesn't exist\n";
+      return M3DC1_FAILURE;
+    }
+    fclose(test_in);
+  }
+
+  pGeom g = NULL;
+  if (isMeshModel)
+    g = pumi_geom_load(model_file, "mesh");
+  else if (isNullModel)
+    g = pumi_geom_load((const char*)NULL, "null");
+  else
+    g = pumi_geom_load(model_file, "analytic");
+
+  if (!g)
+  {
+    if (!PCU_Comm_Self())
+      std::cout << "[M3D-C1 ERROR] " << __func__ << " failed: unable to load model from \"" << model_file << "\"\n";
+    return M3DC1_FAILURE;
+  }
+
+  m3dc1_model::instance()->model = g->getGmi();
+  if (!m3dc1_model::instance()->model)
+  {
+    if (!PCU_Comm_Self())
+      std::cout << "[M3D-C1 ERROR] " << __func__ << " failed: loaded geometry has null gmi model\n";
+    return M3DC1_FAILURE;
+  }
+  if (!isMeshModel && !isNullModel)
+    m3dc1_model::instance()->load_analytic_model(model_file); 
+  pumi_geom_freeze(g);
+  if (!isMeshModel && !isNullModel)
+  {
+    m3dc1_model::instance()->caculateBoundingBox();
   }
   else
-    fclose(test_in);
-
-  pGeom g = pumi_geom_load(model_file, "analytic");
-  m3dc1_model::instance()->model = g->getGmi();
-  m3dc1_model::instance()->load_analytic_model(model_file); 
-  pumi_geom_freeze(g);
-
-  m3dc1_model::instance()->caculateBoundingBox();
+  {
+    // Bounding-box probing can dereference null callbacks for null/mesh models.
+    // Use a safe default; callers can still proceed to mesh load.
+    m3dc1_model::instance()->boundingBox[0] = 0.0;
+    m3dc1_model::instance()->boundingBox[1] = 0.0;
+    m3dc1_model::instance()->boundingBox[2] = 1.0;
+    m3dc1_model::instance()->boundingBox[3] = 1.0;
+  }
   // save the num of geo ent on the oringal plane
   m3dc1_model::instance()->numEntOrig[0]=m3dc1_model::instance()->model->n[0];
   //if (m3dc1_model::instance()->model->n[1]==1) assert(m3dc1_model::instance()->numEntOrig[0]==0); // for a smooth loop, there is no geo vtx 
@@ -1014,7 +1065,7 @@ void m3dc1_mesh_load_3d(char* mesh_file, int* num_plane)
   m3dc1_model::instance()->create3D();
 
   m3dc1_mesh::instance()->mesh = apf::loadMdsMesh(m3dc1_model::instance()->model,
-            mesh_file);
+            mesh_file, m3dc1_current_pcu());
 
   apf::Mesh2* mesh = m3dc1_mesh::instance()->mesh;
 
@@ -1935,9 +1986,15 @@ int m3dc1_node_getnormvec (int* /* in */ node_id, double* /* out */ xyzt)
   apf::MeshEntity* vt = getMdsEntity(m3dc1_mesh::instance()->mesh, 0, *node_id);
   assert(vt);
   xyzt[2]=0.0;
+  gmi_model* model = m3dc1_model::instance()->model;
+  if (!model || !gmi_has_normal(model))
+  {
+    xyzt[0] = xyzt[1] = 0.0;
+    return M3DC1_SUCCESS;
+  }
   //cout<<"nodnormalvec_ "<<*iNode<<" "<<vt<<endl;
   gmi_ent* gent= (gmi_ent*)(m3dc1_mesh::instance()->mesh->toModel(vt));
-  int gType = gmi_dim(m3dc1_model::instance()->model,gent);
+  int gType = gmi_dim(model,gent);
   if (gType !=  1 && gType !=  0)
   {
     xyzt[0] = xyzt[1] = 0.0;
@@ -1980,15 +2037,16 @@ int m3dc1_node_getnormvec (int* /* in */ node_id, double* /* out */ xyzt)
         gmi_ent* pe = gEdges.at(i);
         double cd[3]={0,0,0};
         double paraRange[2];
-        gmi_range(m3dc1_model::instance()->model, pe, 0, paraRange);
-        M3DC1::Expression** pn=(M3DC1::Expression**) gmi_analytic_data(m3dc1_model::instance()->model,pe);
-        if (!pn) continue;
+        gmi_range(model, pe, 0, paraRange);
         numEdgePlane++;
-        M3DC1::evalCoord(paraRange[0],cd, pn);
+        gmi_eval(model, pe, paraRange, cd);
         if (checkSamePoint2D(vcd,cd))
-          M3DC1::evalNormalVector(pn[0],pn[1], paraRange[0], normalvec);
+          gmi_normal(model, pe, paraRange, normalvec);
         else
-          evalNormalVector(pn[0],pn[1], paraRange[1], normalvec);
+        {
+          double p1[2] = {paraRange[1], 0.0};
+          gmi_normal(model, pe, p1, normalvec);
+        }
         xyzt[0]+=normalvec[0];
         xyzt[1]+=normalvec[1];
         xyzt[2]+=normalvec[2];
@@ -2008,8 +2066,7 @@ int m3dc1_node_getnormvec (int* /* in */ node_id, double* /* out */ xyzt)
     {
       apf::Vector3 param(0,0,0);
       m3dc1_mesh::instance()->mesh->getParam(vt,param);
-      M3DC1::Expression** pn=(M3DC1::Expression**) gmi_analytic_data(m3dc1_model::instance()->model,gent);
-      evalNormalVector(pn[0],pn[1], param[0], xyzt);
+      gmi_normal(model, gent, &param[0], xyzt);
     }
   }
   return M3DC1_SUCCESS;
@@ -2032,8 +2089,11 @@ int m3dc1_node_getcurv (int* /* in */ node_id, double* /* out */ curv)
   }
 
   *curv=0.0;
+  gmi_model* model = m3dc1_model::instance()->model;
+  if (!model || !gmi_has_normal(model))
+    return M3DC1_SUCCESS;
   gmi_ent* gent= (gmi_ent*)(m3dc1_mesh::instance()->mesh->toModel(vt));
-  int gType = gmi_dim(m3dc1_model::instance()->model,gent);
+  int gType = gmi_dim(model,gent);
   if (gType==0)
   {
     apf::Vector3 vcd_t;
@@ -4108,7 +4168,7 @@ void m3dc1_spr_adapt (FieldID* field_id, int* index, int* ts,
     apf::Field* targetField0 = get_vectorComponent_of_field(mesh, targetField);
     apf::Field* ip = spr::getGradIPField(targetField0, "ip", 2);
 
-    size_field = spr::getSPRSizeField(ip, *ar);
+    size_field = spr::getSPRSizeField(ip, *ar, m3dc1_current_pcu());
     process_size_field(mesh, size_field, *ts, *max_size, *refine_level, *coarsen_level);
     fields.push_back(size_field);
 

@@ -39,7 +39,6 @@ module adapt
     use m3dc1_output
     use auxiliary_fields
     use pellet
-    use scorec_mesh_mod
     use m3dc1_nint
     use coils
     use transport_coefficients
@@ -257,11 +256,15 @@ module adapt
 
     call straighten_fields()
 
+#ifndef USEPETSC
     if (iadaptFaceNumber.gt.0) then
         call adapt_model_face(temporary_field%vec%id,psimin,psibound,iadaptFaceNumber)
     else
         call adapt_by_field(temporary_field%vec%id,psimin,psibound)
     endif
+#else
+    if (myrank.eq.0) print *, "adapt_by_psi mesh adaptation unavailable with USEPETSC build"
+#endif
 
     write(mesh_file_name,"(A7,A)") 'adapted', 0
     if(iadapt_writevtk .eq. 1) call m3dc1_mesh_write (mesh_file_name,0,ntime)
@@ -302,10 +305,7 @@ module adapt
 ! +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   subroutine adapt_by_spr(fid,idx,t,ar,maxsize,refinelevel,coarsenlevel,update)
 ! +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    use diagnostics
     use basic
-    use error_estimate
-    use scorec_mesh_mod
     use basic
     use mesh_mod
     use arrays
@@ -313,7 +313,6 @@ module adapt
     use sparse
     use time_step
     use auxiliary_fields
-    use scorec_mesh_mod
     use transport_coefficients
 
     character(len=32) :: mesh_file_name
@@ -403,10 +402,9 @@ module adapt
 ! +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   subroutine adapt_by_error
 ! +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    use diagnostics
     use basic
-    use error_estimate
-    use scorec_mesh_mod
+    use error_estimate, only: NUMTERM, JUMPU, JUMPPSI, solutionH2Norm, &
+      jump_discontinuity, elem_residule
     use basic
     use mesh_mod
     use arrays
@@ -414,7 +412,6 @@ module adapt
     use sparse
     use time_step
     use auxiliary_fields
-    use scorec_mesh_mod
     use transport_coefficients
 
     vectype, allocatable :: edge_error(:,:)
@@ -432,6 +429,11 @@ module adapt
     vectype :: maxPhi, maxPs
     vectype, dimension(NUMTERM) :: jump_sum
 
+#ifdef USEPETSC
+    if (myrank.eq.0) print *, "adapt_by_error unavailable with USEPETSC build"
+    return
+#endif
+
     write(mesh_file_name,"(A7,A)") 'adapted', 0
     write(file_name1, "(A9,I0,A)") 'errorJump', ntime,0
     write(file_name2, "(A8,I0,A)") 'errorElm', ntime,0
@@ -440,7 +442,12 @@ module adapt
     call m3dc1_mesh_getnumglobalent (0, num_node_total)
 
     !if (myrank .eq. 0) print*, "time", ntime, "current max", max_val(1), min_val(1), "mesh size before adapt", num_node_total
+#ifndef USEPETSC
     call m3dc1_field_max(field_vec%id, max_val, min_val)
+#else
+    max_val = 0.
+    min_val = 0.
+#endif
     maxPhi = max(abs(max_val(1+(u_g-1)*dofs_per_node)),abs(min_val(1+(u_g-1)*dofs_per_node)))
     maxPs =  max(abs(max_val((psi_g-1)*dofs_per_node)+1),abs(min_val((psi_g-1)*dofs_per_node)+1))
 
@@ -498,13 +505,17 @@ module adapt
       max_error(1)= maxval(node_error(1,:))
       max_error(2)= maxval(node_error(2,:))
       buff = max_error
+#ifndef USEPETSC
       call mpi_allreduce (buff, max_error, 2, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ier )
+#endif
     else
       max_error(1) = sum (node_error(1,:))
       max_error(2) = sum (node_error(2,:))
       !max_error= maxval(node_error(:,:))
       buff = max_error
+#ifndef USEPETSC
       call mpi_allreduce (buff, max_error, 2, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ier )
+#endif
     end if
 
     if (max_error(1) .gt. error_tol * adapt_target_error .or. max_error(2) &

@@ -308,10 +308,9 @@ contains
   subroutine pellet_domain
 
     use basic
+    use mpi
 
     implicit none
-
-    include 'mpif.h'
 
     integer :: j
     integer :: itri, iz, izone, ier

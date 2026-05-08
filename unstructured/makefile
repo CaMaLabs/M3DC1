@@ -5,10 +5,10 @@ ifeq (,$(filter _%,$(notdir $(CURDIR))))
 #--------------------------------------------------------------
 
 ifeq ($(USEPETSC), 1)
-  OPTS := -DUSEPETSC -Dmesh_mod=basic_mesh_mod \
+  OPTS := -DUSEPETSC -Dmesh_mod=scorec_mesh_mod \
 	-Dvector_mod=petsc_vector_mod -Dmatrix_mod=petsc_matrix_mod \
 	-Dmatrix_type=petsc_matrix -Dvector_type=petsc_vector
-  V_OBJ := basic_mesh.o petsc_vector.o petsc_matrix.o
+  V_OBJ := scorec_mesh.o petsc_vector.o petsc_matrix.o basic_mesh.o
   BIN_POSTFIX := $(BIN_POSTFIX)-petsc
 else
   USESCOREC = 1
@@ -197,12 +197,12 @@ OBJS := fftw_fortran.o read_namelist.o gsl_wrapper.o \
 	transport.o \
 	auxiliary_fields.o runaway_advection.o \
 	time_step_split.o time_step_unsplit.o \
-        hdf5_output.o particle.o   \
+        hdf5_output.o hdf5_mpio_stubs.o particle.o   \
 	time_step.o output.o restart_hdf5.o \
 	error_estimate.o scorec_adapt.o adapt.o newpar.o input.o ludef_t.o \
 	init_conds.o \
 	get_pc_skip_count.o \
-	parse_solver_options.o
+	parse_solver_options.o compat_shims.o
 
 ifeq ($(ACC), 1)
 	OBJS := $(OBJS:metricterms_new.o=metricterms_new_gpu.o)

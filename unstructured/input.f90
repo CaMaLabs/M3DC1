@@ -1063,6 +1063,8 @@ subroutine set_defaults
        "1: Output transport coefficient fields", output_grp)
   call add_var_int("iwrite_aux_vars", iwrite_aux_vars, 1, &
        "1: Output auxiliary variable fields", output_grp)
+  call add_var_int("iwrite_hdf5", iwrite_hdf5, 1, &
+       "1: Write HDF5 output", output_grp)
   call add_var_int("iwrite_adjacency", iwrite_adjacency, 1, &
        "1: Output mesh adjacency info", output_grp)
   call add_var_int("iwrite_quad_points", iwrite_quad_points, 0, &
@@ -1602,7 +1604,7 @@ subroutine validate_input
 #endif
 
 #if defined(USE3D) && defined(USEPETSC)
-  if(maxrank.ne.nplanes) then 
+  if(maxrank+1.ne.nplanes) then 
      print *, 'Must run with procs = nplanes'
      call safestop(1)
   end if
@@ -1870,4 +1872,3 @@ subroutine validate_input
   end if
 
 end subroutine validate_input
-

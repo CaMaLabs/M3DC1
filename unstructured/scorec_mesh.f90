@@ -34,8 +34,22 @@ module scorec_mesh_mod
   real :: toroidal_pack_factor
   real :: toroidal_pack_angle
   real :: toroidal_period
+  integer :: graph_fill = 0
+  integer :: solver_type = 0
+  integer :: num_iter = 100
+  integer :: subdomain_overlap = 1
+  integer :: poly_ord = 1
+  real :: solver_tol = 1.0e-9
+  real :: ilu_drop_tol = 0.
+  real :: ilu_fill = 1.
+  real :: ilu_omega = 1.
+  character(len=50) :: krylov_solver = "gmres"
+  character(len=50) :: preconditioner = "ilu"
+  character(len=50) :: sub_dom_solver = "ilu"
 
   integer, dimension (:), allocatable :: nodes_owned
+  integer, dimension(:), allocatable, target :: ghost_nodes_cache
+  integer :: num_ghost_nodes_cache = -1
 
   integer, parameter :: ZONE_ANY = -1
   integer, parameter :: ZONE_UNKNOWN = 0
@@ -72,10 +86,11 @@ contains
     implicit none
 
     integer :: myrank, maxrank, ier
+    logical :: exists_on_disk
     include 'mpif.h'
 #ifdef USE3D
     real :: angle, beta
-    integer :: i,procs_per_plane, full_group, plane_group
+    integer :: i,procs_per_plane, full_group, plane_group, num3d
     integer, allocatable :: ranks(:)
     real, allocatable :: xvals(:)
     integer :: nvals
@@ -136,63 +151,81 @@ contains
     if (iadapt_snap.eq.1) call m3dc1_model_settopo()
 
 #ifdef USE3D   
-    if(myrank.eq.0) print *, 'setting number of planes = ', nplanes
-    call m3dc1_model_setnumplane(nplanes)
-
-    procs_per_plane = maxrank/nplanes
-    if(myrank.eq.0) &
-         print *, 'number of processes per plane = ', procs_per_plane
-
     if(myrank.eq.0) print *, 'loading partitioned mesh...'
     if(is_rectilinear) then
        if(myrank.eq.0) print *, 'rectilinear mesh model...'
     else
        if(myrank.eq.0) print *, 'curved mesh model...'
     endif
+    if(myrank.eq.0) print *, 'DEBUG scorec step 1: before model_load'
     write(name_buff,"(A,A)") mesh_model(1:len_trim(mesh_model)),0
     call m3dc1_model_load(name_buff)
+    if(myrank.eq.0) print *, 'DEBUG scorec step 1: after model_load'
+
+    if(myrank.eq.0) print *, 'setting number of planes = ', nplanes
+    if(myrank.eq.0) print *, 'DEBUG scorec step 2: before setnumplane'
+    call m3dc1_model_setnumplane(nplanes)
+    if(myrank.eq.0) print *, 'DEBUG scorec step 2: after setnumplane'
+
+    procs_per_plane = (maxrank+1)/nplanes
+    if(myrank.eq.0) &
+         print *, 'number of processes per plane = ', procs_per_plane
+
+    if(myrank.eq.0) print *, 'DEBUG scorec step 3: before mesh_load'
     write(name_buff,"(A,A)")  mesh_filename(1:len_trim(mesh_filename)),0
     call m3dc1_mesh_load (name_buff)
+    if(myrank.eq.0) print *, 'DEBUG scorec step 3: after mesh_load'
 
-    ! set up toroidal angles
-    if(iread_planes.eq.1) then
-       nvals = 0
-       call read_ascii_column('plane_positions', xvals, nvals, icol=1)
-       if(nvals.ne.nplanes) then
-          if(myrank.eq.0) &
-               print *, 'Error: number of planes in plane_positions != nplanes'
-          call safestop(8)
-       end if
-       do i=1, nvals
-          if(xvals(i).lt.0. .or. xvals(i).ge.toroidal_period) then 
-             if(myrank.eq.0) print *, 'Error: plane ', i, ' is at angle ', xvals(i), &
-             ' which is outside the range [ 0, ', toroidal_period, ').'
+    num3d = 0
+    call m3dc1_mesh_getnument(3, num3d)
+    if (myrank.eq.0) print *, 'DEBUG scorec mesh dim probe: num3d=', num3d
+
+    if (num3d .le. 0) then
+       ! set up toroidal angles on 2D mesh before 3D extrusion
+       if(iread_planes.eq.1) then
+          nvals = 0
+          call read_ascii_column('plane_positions', xvals, nvals, icol=1)
+          if(nvals.ne.nplanes) then
+             if(myrank.eq.0) &
+                  print *, 'Error: number of planes in plane_positions != nplanes'
              call safestop(8)
           end if
-          call m3dc1_plane_setphi(i-1, xvals(i))
-          if(myrank.eq.0) print *, 'Plane ', i, 'at angle ', xvals(i)
-       end do
-       deallocate(xvals)
+          do i=1, nvals
+             if(xvals(i).lt.0. .or. xvals(i).ge.toroidal_period) then
+                if(myrank.eq.0) print *, 'Error: plane ', i, ' is at angle ', xvals(i), &
+                ' which is outside the range [ 0, ', toroidal_period, ').'
+                call safestop(8)
+             end if
+             if(myrank.eq.0) print *, 'DEBUG scorec step 4: before plane_setphi idx=', i-1
+             call m3dc1_plane_setphi(i-1, xvals(i))
+             if(myrank.eq.0) print *, 'DEBUG scorec step 4: after plane_setphi idx=', i-1
+             if(myrank.eq.0) print *, 'Plane ', i, 'at angle ', xvals(i)
+          end do
+          deallocate(xvals)
+       else
+          do i=0, nplanes-1
+             if(toroidal_pack_factor.gt.1. .and. i.gt.0) then
+                beta = 2.*sqrt(alog(toroidal_pack_factor))
+                angle = toroidal_pack_angle + &
+                     (toroidal_period/2.)*(1. + &
+                     erf(beta*(real(i)/real(nplanes) - 0.5)) / &
+                     erf(beta/2.))
+             else
+                angle = toroidal_period*real(i)/real(nplanes)
+             end if
+             if(myrank.eq.0) print *, 'DEBUG scorec step 4: before plane_setphi idx=', i
+             call m3dc1_plane_setphi(i, angle)
+             if(myrank.eq.0) print *, 'DEBUG scorec step 4: after plane_setphi idx=', i
+             if(myrank.eq.0) print *, 'Plane ', i+1, 'at angle ', angle
+          end do
+       end if
+       if(myrank.eq.0) print *, 'setting up 3D mesh...'
+       if(myrank.eq.0) print *, 'DEBUG scorec step 5: before mesh_build3d'
+       call m3dc1_mesh_build3d(0,0,0)
+       if(myrank.eq.0) print *, 'DEBUG scorec step 5: after mesh_build3d'
     else
-       do i=0, nplanes-1
-          if(toroidal_pack_factor.gt.1. .and. i.gt.0) then
-             beta = 2.*sqrt(alog(toroidal_pack_factor))
-             angle = toroidal_pack_angle + &
-                  (toroidal_period/2.)*(1. + &
-                  erf(beta*(real(i)/real(nplanes) - 0.5)) / &
-                  erf(beta/2.))
-          else
-             angle = toroidal_period*real(i)/real(nplanes)
-          end if
-          call m3dc1_plane_setphi(i, angle)
-          if(myrank.eq.0) print *, 'Plane ', i+1, 'at angle ', angle
-       end do
+       if (myrank.eq.0) print *, 'DEBUG scorec: mesh already 3D, skipping plane_setphi/mesh_build3d'
     end if
-
-
-    ! build mesh
-    if(myrank.eq.0) print *, 'setting up 3D mesh...'
-    call m3dc1_mesh_build3d(0,0,0)
 
     ! set up communications groups
     allocate(ranks(procs_per_plane))
@@ -209,8 +242,32 @@ contains
     ! in serial, it loads the whole mesh
     ! in parallel, it loads N-part distributed mesh.
     ! to get N-part distributed mesh, run split_smb provided as mesh utilities
-    write(name_buff,"(A,A)")  mesh_model(1:len_trim(mesh_model)),0
-    call m3dc1_model_load(name_buff)
+    if (len_trim(mesh_model) .gt. 0) then
+       if (trim(mesh_model) .ne. '.null') then
+          inquire(file=trim(mesh_model), exist=exists_on_disk)
+          if (.not. exists_on_disk) then
+             if (myrank .eq. 0) then
+                print *, 'Error: SCOREC model file not found: ', trim(mesh_model)
+             end if
+             call safestop(8)
+          end if
+       end if
+       write(name_buff,"(A,A)")  mesh_model(1:len_trim(mesh_model)),0
+       call m3dc1_model_load(name_buff)
+    end if
+    if (len_trim(mesh_filename) .le. 0) then
+       if (myrank .eq. 0) then
+          print *, 'Error: mesh_filename is empty for SCOREC mesh load.'
+       end if
+       call safestop(8)
+    end if
+    inquire(file=trim(mesh_filename), exist=exists_on_disk)
+    if (.not. exists_on_disk) then
+       if (myrank .eq. 0) then
+          print *, 'Error: SCOREC mesh file not found: ', trim(mesh_filename)
+       end if
+       call safestop(8)
+    end if
     write(name_buff,"(A,A)")  mesh_filename(1:len_trim(mesh_filename)),0
     call m3dc1_mesh_load (name_buff)
 #endif
@@ -237,7 +294,41 @@ contains
     if(inode2-1 .ne. owned_nodes()) call abort()
 
     call get_global_dims
+    num_ghost_nodes_cache = -1
   end subroutine update_nodes_owned
+
+  subroutine get_ghost_nodes(ids, num)
+    implicit none
+    integer, intent(out), pointer :: ids(:)
+    integer, intent(out) :: num
+    integer :: numnodes, inode, myrank, own_process, ier, cnt
+    include 'mpif.h'
+
+    if (num_ghost_nodes_cache .lt. 0) then
+      call MPI_Comm_rank(MPI_COMM_WORLD, myrank, ier)
+      numnodes = local_nodes()
+
+      if (allocated(ghost_nodes_cache)) deallocate(ghost_nodes_cache)
+      allocate(ghost_nodes_cache(max(1, numnodes)))
+
+      cnt = 0
+      do inode = 1, numnodes
+        call m3dc1_ent_getownpartid(0, inode-1, own_process)
+        if (own_process .ne. myrank) then
+          cnt = cnt + 1
+          ghost_nodes_cache(cnt) = inode
+        end if
+      end do
+      num_ghost_nodes_cache = cnt
+    end if
+
+    num = num_ghost_nodes_cache
+    if (num .gt. 0) then
+      ids => ghost_nodes_cache(1:num)
+    else
+      ids => ghost_nodes_cache(1:1)
+    end if
+  end subroutine get_ghost_nodes
   subroutine unload_mesh
     if(.not. initialized) return
     deallocate(nodes_owned)
@@ -323,6 +414,31 @@ contains
     call m3dc1_mesh_getnumownent (0, owned_nodes)
   end function owned_nodes
 
+  !==============================================================
+  ! owned_dofs
+  ! ~~~~~~~~~~
+  ! returns number of owned dofs on this rank
+  !==============================================================
+  integer function owned_dofs()
+    implicit none
+    owned_dofs = owned_nodes()*dofs_per_node
+  end function owned_dofs
+
+  !==============================================================
+  ! global_dofs
+  ! ~~~~~~~~~~~
+  ! returns global number of dofs
+  !==============================================================
+  integer function global_dofs()
+    implicit none
+    include 'mpif.h'
+    integer :: nown, ierr
+
+    nown = owned_nodes()
+    call MPI_Allreduce(nown, global_dofs, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+    global_dofs = global_dofs*dofs_per_node
+  end function global_dofs
+
 
   !==============================================================
   ! local_nodes
@@ -334,6 +450,19 @@ contains
     call m3dc1_mesh_getnument(0, local_nodes)
   end function local_nodes
 
+  !==============================================================
+  ! global_node_id
+  ! ~~~~~~~~~~~~~~
+  ! returns 1-based global node id for a local node index
+  !==============================================================
+  integer function global_node_id(inode)
+    implicit none
+    integer, intent(in) :: inode
+
+    call m3dc1_ent_getglobalid(0, inode - 1, global_node_id)
+    global_node_id = global_node_id + 1
+  end function global_node_id
+
 
   !==============================================================
   ! get_element_nodes
@@ -344,7 +473,8 @@ contains
     implicit none
     integer, intent(in) :: ielm
     integer, intent(out), dimension(nodes_per_element) :: n
-    integer :: elem_dim, numelm, nodes_per_element_get
+    integer :: elem_dim, numelm, nodes_per_element_get, copy_n
+    integer, dimension(8) :: nbuf
     elem_dim = 2
 #ifdef USE3D
     elem_dim = 3
@@ -355,11 +485,11 @@ contains
        print *, "ielm ", ielm, " should be equal to or less than ", numelm
     endif
 #endif
-    call m3dc1_ent_getadj (elem_dim, ielm-1, 0, n, nodes_per_element, nodes_per_element_get)
-    if (nodes_per_element_get .ne. nodes_per_element) then
-      print *, "error get_element_nodes: nodes_per_element_get",nodes_per_element_get
-      call abort 
-    end if
+    nbuf = -1
+    call m3dc1_ent_getadj (elem_dim, ielm-1, 0, nbuf, size(nbuf), nodes_per_element_get)
+    copy_n = min(nodes_per_element, max(0, nodes_per_element_get))
+    if (copy_n .gt. 0) n(1:copy_n) = nbuf(1:copy_n)
+    if (copy_n .lt. nodes_per_element) n(copy_n+1:nodes_per_element) = nbuf(1)
     n(:)=n(:)+1
   end subroutine get_element_nodes
 
@@ -529,12 +659,15 @@ contains
     integer, intent(in) :: itri
     type(element_data), intent(out) :: d
     real :: x2, x3, z2, z3, phi2, phi3, x2p, x3p, z2p, z3p, hi
-    integer :: nodeids(nodes_per_element)
+    integer :: nodeids(nodes_per_element), tmp
+    logical :: reordered
     
     d%itri = itri
 
     call get_element_nodes(itri, nodeids)
-    
+    reordered = .false.
+10  continue
+
     call get_node_pos(nodeids(1), d%R, d%phi, d%Z)
     call get_node_pos(nodeids(2), x2, phi2, z2)
     call get_node_pos(nodeids(3), x3, phi3, z3)
@@ -558,7 +691,22 @@ contains
     d%b = x3p
     d%c = z3p
     if(d%c .le. 0.) then
-       print *, 'ERROR: clockwise node ordering for element',itri
+       if (.not. reordered) then
+          tmp = nodeids(2)
+          nodeids(2) = nodeids(3)
+          nodeids(3) = tmp
+          reordered = .true.
+          goto 10
+       endif
+       print *, 'ERROR: invalid node ordering for element',itri
+       print *, '  node ids = ', nodeids
+       print *, '  node 1 = ', d%R, d%phi, d%Z
+       print *, '  node 2 = ', x2, phi2, z2
+       print *, '  node 3 = ', x3, phi3, z3
+#ifdef USE3D
+       call get_node_pos(nodeids(4), x2, phi2, z2)
+       print *, '  node 4 = ', x2, phi2, z2
+#endif
        call abort()
     endif
 

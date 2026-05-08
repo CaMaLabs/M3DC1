@@ -6,6 +6,7 @@ module particles
    use newvar_mod
    use gradshafranov
    !use mpi_f08
+   use mpi
    use ieee_arithmetic
    implicit none
    private
@@ -138,7 +139,7 @@ contains
 subroutine define_mpi_particle(ierr)
    implicit none
 
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    integer, intent(out) :: ierr
    integer, parameter :: pnvars = 15
@@ -191,7 +192,7 @@ end subroutine define_mpi_particle
 subroutine define_mpi_elfield(ierr)
    implicit none
 
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    integer, intent(out) :: ierr
    integer, parameter :: pnvars = 24
@@ -270,7 +271,7 @@ subroutine particle_test
    use m3dc1_nint
    use arrays
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    integer, parameter :: trunit = 120
    real :: tstart, tend
@@ -392,7 +393,7 @@ subroutine init_particles(lrestart, ierr)
    use boundary_conditions
 
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    logical, intent(in) :: lrestart
    integer, intent(out) :: ierr
@@ -1917,7 +1918,7 @@ subroutine particle_scaleback(scalefac)
    use mesh_mod
    implicit none
 
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    vectype, intent(in) :: scalefac
    integer :: ipart, ielm, ierr
@@ -1951,7 +1952,7 @@ subroutine delete_particle(exchange)
    use basic
    use diagnostics
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    logical, intent(in) :: exchange
    !integer, intent(in) :: ipart
@@ -2030,7 +2031,7 @@ subroutine particle_step(pdt)
    use diagnostics
    use auxiliary_fields
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    real, intent(in) :: pdt
 
@@ -2094,7 +2095,7 @@ subroutine update_particle_pressure
    use arrays
    use diagnostics
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    real    :: tstart, tend
    integer :: ierr
@@ -2126,7 +2127,7 @@ end subroutine update_particle_pressure
 subroutine finalize_particles
    use arrays
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    !integer :: nelms, ielm
    integer :: ierr
@@ -2632,7 +2633,7 @@ subroutine get_field_coefs(eq)
    use basic
    use auxiliary_fields
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    !type(elfield), intent(out) :: fh  !Field handle
    integer, intent(in) :: eq
@@ -3276,7 +3277,7 @@ subroutine particle_pressure_rhs
    use math
    use m3dc1_nint
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
    intrinsic matmul
 
    real, dimension(dofs_per_element, coeffs_per_element) :: cl
@@ -3613,7 +3614,7 @@ subroutine hdf5_write_particles(ierr)
    use hdf5_output
    implicit none
 
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    integer, intent(out) :: ierr
 
@@ -3826,7 +3827,7 @@ subroutine hdf5_read_particles(filename, ierr)
    use diagnostics
    use hdf5_output
    implicit none
-   include 'mpif.h'
+   ! MPI symbols are provided by module particles (`use mpi`)
 
    character(len=*), intent(in) :: filename
    integer, intent(out) :: ierr

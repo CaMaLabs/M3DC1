@@ -332,6 +332,7 @@ contains
   ! =================
   subroutine output_field(parent_id, name, values, ndofs, nelms, error)
     use hdf5
+    use mpi
     use mesh_mod
     
     implicit none
@@ -346,6 +347,7 @@ contains
     integer(HID_T) :: filespace, memspace, dset_id, plist_id
     integer(HSIZE_T), dimension(rank) :: local_dims, global_dims
     integer(HSSIZE_T), dimension(rank) :: off
+    integer :: ierr_mpi, global_elms_local, offset_elms_local
 
 #ifdef USETAU
     integer :: dummy     ! this is necessary to prevent TAU from
@@ -354,10 +356,13 @@ contains
     
     local_dims(1) = ndofs
     local_dims(2) = nelms
+    call mpi_scan(nelms, offset_elms_local, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr_mpi)
+    offset_elms_local = offset_elms_local - nelms
+    call mpi_allreduce(nelms, global_elms_local, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr_mpi)
     global_dims(1) = ndofs
-    global_dims(2) = global_elms
+    global_dims(2) = global_elms_local
     off(1) = 0
-    off(2) = offset_elms
+    off(2) = offset_elms_local
 
     ! Create global dataset
     call h5screate_simple_f(rank, global_dims, filespace, error)
@@ -448,6 +453,7 @@ contains
   ! ================
   subroutine output_field_int(parent_id, name, values, ndofs, nelms, error)
     use hdf5
+    use mpi
     use mesh_mod
 
     implicit none
@@ -462,6 +468,7 @@ contains
     integer(HID_T) :: filespace, memspace, dset_id, plist_id
     integer(HSIZE_T), dimension(rank) :: local_dims, global_dims
     integer(HSSIZE_T), dimension(rank) :: off
+    integer :: ierr_mpi, global_elms_local, offset_elms_local
 
 #ifdef USETAU
     integer :: dummy     ! this is necessary to prevent TAU from
@@ -470,10 +477,13 @@ contains
 
     local_dims(1) = ndofs
     local_dims(2) = nelms
+    call mpi_scan(nelms, offset_elms_local, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr_mpi)
+    offset_elms_local = offset_elms_local - nelms
+    call mpi_allreduce(nelms, global_elms_local, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr_mpi)
     global_dims(1) = ndofs
-    global_dims(2) = global_elms
+    global_dims(2) = global_elms_local
     off(1) = 0
-    off(2) = offset_elms
+    off(2) = offset_elms_local
 
     ! Create global dataset
     call h5screate_simple_f(rank, global_dims, filespace, error)

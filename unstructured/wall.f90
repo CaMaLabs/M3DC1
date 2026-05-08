@@ -48,6 +48,9 @@ endif
        call insert_block(wall_matrix, itri, 1, 1, mat_dofs, MAT_ADD)
     end do
 
+    ! Assemble before applying row replacements. PETSc forbids mixing
+    ! ADD_VALUES and INSERT_VALUES on the same matrix state.
+    call finalize(wall_matrix)
     call boundary_wall_dist(wall_dist%vec, wall_matrix)
     call finalize(wall_matrix)
     

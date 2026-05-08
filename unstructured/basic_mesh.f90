@@ -10,8 +10,57 @@ module basic_mesh_mod
   integer :: iper, jper
   integer :: icurv
   integer :: nplanes
+  integer :: igeometry = 0
+  real :: toroidal_period = 6.283185307179586d0
+  integer :: nperiods = 1
+  integer :: ifull_torus = 1
+  integer :: imulti_region = 0
+  integer :: iread_vmec = 0
+  integer :: iread_planes = 0
+  integer :: ipartitioned = 0
+  integer :: imatassemble = 0
+  integer :: nzer_factor = -1
+  integer :: nzer_manual = -1
+  integer :: iadapt_snap = 1
+  integer :: graph_fill = 0
+  integer :: solver_type = 0
+  integer :: num_iter = 100
+  integer :: subdomain_overlap = 1
+  integer :: poly_ord = 1
+  real :: xcenter = 0.
+  real :: zcenter = 0.
+  real :: bloat_factor = 0.
+  real :: bloat_distance = 0.
+  real :: toroidal_pack_factor = 1.
+  real :: toroidal_pack_angle = 0.
+  real :: solver_tol = 1.0e-9
+  real :: ilu_drop_tol = 0.
+  real :: ilu_fill = 1.
+  real :: ilu_omega = 1.
+  character(len=256) :: vmec_filename = "geometry.nc"
+  character(len=256) :: mesh_filename = "struct-dmg.sms"
+  character(len=256) :: mesh_model = "struct.dmg"
+  character(len=50) :: krylov_solver = "gmres"
+  character(len=50) :: preconditioner = "ilu"
+  character(len=50) :: sub_dom_solver = "ilu"
 
   integer, parameter :: maxi = 20
+
+  integer, parameter :: ZONE_ANY = -1
+  integer, parameter :: ZONE_UNKNOWN = 0
+  integer, parameter :: ZONE_PLASMA = 1
+  integer, parameter :: ZONE_CONDUCTOR = 2
+  integer, parameter :: ZONE_VACUUM = 3
+
+  integer, parameter :: BOUND_ANY = -1
+  integer, parameter :: BOUND_UNKNOWN = 0
+  integer, parameter :: BOUND_FIRSTWALL = 1
+  integer, parameter :: BOUND_DOMAIN = 2
+
+  integer, parameter :: max_bounds = 20
+  integer, parameter :: max_zones = 20
+  integer :: boundary_type(max_bounds) = BOUND_UNKNOWN
+  integer :: zone_type(max_zones) = ZONE_UNKNOWN
 
   logical, private :: has_bounding_box = .false.
   real, private :: bb(4)
@@ -42,6 +91,11 @@ module basic_mesh_mod
   integer, allocatable :: num_adjacent(:)
 
   integer, private :: myplane ! toroidal plane of current process
+  integer :: global_elms = 0
+  integer :: offset_elms = 0
+  integer :: elms_per_plane = 0
+  integer :: max_adj = 1
+  integer, allocatable :: adjacent(:,:)
 
 contains
 
@@ -288,16 +342,11 @@ contains
   subroutine load_mesh
 
     use math
+    use petsc
 
     implicit none
 
 #include "finclude/petsc.h"
-!#ifndef PETSC_31
-!#include "finclude/petscvec.h"
-!#include "finclude/petscmat.h"
-!#include "finclude/petscis.h"
-!#endif
-#include "finclude/petscis.h90"
 
     integer :: num_global_elements
     type(node_type), allocatable :: global_node(:)
@@ -386,7 +435,7 @@ contains
        call MatDestroy(adjacency, ierr)
        call ISPartitioningToNumbering(node_distribution,global_numbering,ierr)
        
-       call AOCreateBasicIS(global_numbering, PETSC_NULL, ordering, ierr)
+       call AOCreateBasicIS(global_numbering, PETSC_NULL_IS, ordering, ierr)
        
        call PetscViewerASCIIOpen(PETSC_COMM_WORLD,'node_distribution',pv,ierr)
        call ISView(node_distribution, pv, ierr)
@@ -405,11 +454,11 @@ contains
        allocate(nodes_per_proc_local(size), nodes_per_proc(size))
        nodes_per_proc_local = 0
 
-       call ISGetIndicesF90(node_distribution, idx, ierr)
+       call ISGetIndices(node_distribution, idx, ierr)
        do i=1, num_local_nodes
           nodes_per_proc_local(idx(i)+1) = nodes_per_proc_local(idx(i)+1) + 1
        end do
-       call ISRestoreIndicesF90(node_distribution, idx, ierr)
+       call ISRestoreIndices(node_distribution, idx, ierr)
        
        call mpi_allreduce(nodes_per_proc_local, nodes_per_proc, size, &
             MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -460,6 +509,13 @@ contains
           local_elm(k) = global_elm(itri)
        end if
     end do
+    call MPI_Scan(num_local_elements, offset_elms, 1, MPI_INTEGER, MPI_SUM, PETSC_COMM_WORLD, ierr)
+    offset_elms = offset_elms - num_local_elements
+    call MPI_Allreduce(num_local_elements, global_elms, 1, MPI_INTEGER, MPI_SUM, PETSC_COMM_WORLD, ierr)
+    if(nplanes.gt.0) elms_per_plane = global_elms / nplanes
+    if(allocated(adjacent)) deallocate(adjacent)
+    allocate(adjacent(max_adj,max(1,num_local_elements)))
+    adjacent = 0
 
 
     ! Determine ghost nodes
@@ -554,6 +610,7 @@ contains
     if(allocated(local_node)) deallocate(local_node)
     if(allocated(local_elm)) deallocate(local_elm)
     if(allocated(global_id)) deallocate(global_id)
+    if(allocated(adjacent)) deallocate(adjacent)
   end subroutine unload_mesh
 
   !======================================================================
@@ -602,15 +659,96 @@ contains
   end function local_nodes
 
   !==============================================================
-  ! local_dofs
-  ! ~~~~~~~~~~
+  ! local_dofs_count
+  ! ~~~~~~~~~~~~~~~~
   ! returns the number of dofs local to this process
   !==============================================================
-  integer function local_dofs()
+  integer function local_dofs_count()
     implicit none
 
-    local_dofs = total_local_nodes*dofs_per_node
-  end function local_dofs
+    local_dofs_count = total_local_nodes*dofs_per_node
+  end function local_dofs_count
+
+  !==========================================================
+  ! local_dof_vector
+  ! ~~~~~~~~~~~~~~~~
+  ! calculates the dof-to-coefficient map for one element
+  !==========================================================
+  subroutine local_dof_vector(itri, c)
+    implicit none
+
+    integer, intent(in) :: itri
+    real, intent(out), dimension(dofs_per_element,coeffs_per_element) :: c
+
+    type(element_data) :: d
+    real, dimension(coeffs_per_tri,coeffs_per_tri) :: t
+    real, dimension(coeffs_per_dphi,coeffs_per_dphi) :: h
+    integer :: i, j, k, l, m, n
+    integer :: idof, icoeff, ip, it
+
+    call get_element_data(itri, d)
+    call tmatrix(t, d%a, d%b, d%c)
+    call hmatrix(h, d%d)
+
+    c = 0.
+
+    icoeff = 0
+    do i=1, coeffs_per_dphi
+       do j=1, coeffs_per_tri
+          icoeff = icoeff + 1
+          idof = 0
+          do k=1, tor_nodes_per_element
+             do l=1, pol_nodes_per_element
+                do m=1, tor_dofs_per_node
+                   do n=1, pol_dofs_per_node
+                      idof = idof + 1
+                      ip = n + (l-1)*pol_dofs_per_node
+                      it = m + (k-1)*tor_dofs_per_node
+                      c(idof,icoeff) = c(idof,icoeff) + h(it,i)*t(ip,j)
+                   end do
+                end do
+             end do
+          end do
+       end do
+    end do
+  end subroutine local_dof_vector
+
+  !==========================================================
+  ! local_dofs
+  ! ~~~~~~~~~~
+  ! reconstructs local element dofs from coefficients
+  !==========================================================
+  subroutine local_dofs(itri, dof, c)
+    implicit none
+
+    integer, intent(in) :: itri
+    vectype, intent(out), dimension(dofs_per_element) :: dof
+    vectype, intent(in), dimension(coeffs_per_element) :: c
+
+    real, dimension(dofs_per_element,coeffs_per_element) :: cl
+    integer :: i, j, k
+    real :: norm(2), curv(3)
+    vectype, dimension(dofs_per_element) :: temp
+    type(element_data) :: d
+
+    call local_dof_vector(itri, cl)
+
+    temp = 0
+    do j=1, coeffs_per_element
+       temp(:) = temp(:) + cl(:,j)*c(j)
+    end do
+
+    call get_element_data(itri, d)
+    norm(1) = d%co
+    norm(2) = d%sn
+    curv = 0.
+
+    do i=1, nodes_per_element
+       j = (i-1)*dofs_per_node + 1
+       k = j + dofs_per_node - 1
+       call rotate_dofs(temp(j:k), dof(j:k), norm, curv, -1)
+    end do
+  end subroutine local_dofs
 
   !==============================================================
   ! owned_nodes
@@ -622,6 +760,12 @@ contains
 
     owned_nodes = num_local_nodes
   end function owned_nodes
+
+  integer function nodes_owned(inode)
+    implicit none
+    integer, intent(in) :: inode
+    nodes_owned = global_id(inode)
+  end function nodes_owned
 
   !==============================================================
   ! owned_dofs
@@ -841,11 +985,12 @@ contains
   ! about boundary surface
   !======================================================================
   subroutine boundary_node(inode,is_boundary,izone,izonedim,normal,curv, &
-       x,phi,z)
+       x,phi,z,tags)
 
     implicit none
     
     integer, intent(in) :: inode              ! node index
+    integer, intent(in), optional :: tags
     integer, intent(out) :: izone,izonedim    ! zone type/dimension
     real, intent(out) :: normal(2), curv(3)
     real, intent(out) :: x,z,phi              ! coordinates of inode
@@ -865,10 +1010,11 @@ contains
   end subroutine boundary_node
 
 
-  subroutine boundary_edge(itri, is_edge, normal, idim)
+  subroutine boundary_edge(itri, is_edge, normal, idim, tags)
 
     implicit none
     integer, intent(in) :: itri
+    integer, intent(in), optional :: tags
     integer, intent(out) :: is_edge(3)
     real, intent(out) :: normal(2,3)
     integer, intent(out) :: idim(3)
@@ -905,5 +1051,39 @@ contains
        is_edge(i) = 1
     end do
   end subroutine boundary_edge
+
+  subroutine get_zone_index(itri, izone)
+    implicit none
+    integer, intent(in) :: itri
+    integer, intent(out) :: izone
+    integer :: inode(nodes_per_element)
+
+    call get_element_nodes(itri, inode)
+    izone = local_node(inode(1))%izone
+  end subroutine get_zone_index
+
+  subroutine get_zone(itri, izone)
+    implicit none
+    integer, intent(in) :: itri
+    integer, intent(out) :: izone
+    integer :: izone_ind
+
+    call get_zone_index(itri, izone_ind)
+    if (izone_ind .gt. 0 .and. izone_ind .le. max_zones) then
+      izone = zone_type(izone_ind)
+    else
+      izone = ZONE_UNKNOWN
+    end if
+  end subroutine get_zone
+
+  subroutine populate_adjacency_matrix()
+    implicit none
+    ! adjacency arrays are prepared during mesh setup for basic mesh
+  end subroutine populate_adjacency_matrix
+
+  subroutine clear_adjacency_matrix
+    implicit none
+    ! no dynamic adjacency data to clear for basic mesh
+  end subroutine clear_adjacency_matrix
   
 end module basic_mesh_mod

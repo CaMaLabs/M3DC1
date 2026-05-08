@@ -330,9 +330,9 @@ subroutine variable_timestep
   use basic
   use arrays
   use diagnostics
+  use mpi
 
   implicit none
-  include 'mpif.h'
   integer :: ierr
 
 #ifdef USE3D

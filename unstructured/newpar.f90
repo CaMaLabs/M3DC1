@@ -15,7 +15,7 @@ Program Reducedquintic
   use m3dc1_output
   use auxiliary_fields
   use pellet
-  use scorec_mesh_mod
+  use mesh_mod
   use adapt
   use particles
   use math
@@ -140,7 +140,7 @@ Program Reducedquintic
 !$OMP END PARALLEL
 #endif
 
-#ifdef USESCOREC
+#if defined(USESCOREC) || defined(USEPETSC)
   call m3dc1_domain_init()
 #endif
 
@@ -171,7 +171,7 @@ Program Reducedquintic
   if(myrank.eq.0 .and. iprint.ge.1) print *, ' Loading mesh nplane='
   !if(myrank==0 .and. nplanes.gt.1) call parse_solver_options(nplanes, trim(solveroption_filename)//PETSC_NULL_CHARACTER)
 
-#ifndef M3DC1_TRILINOS
+#if !defined(M3DC1_TRILINOS) && !defined(USEPETSC)
   call m3dc1_matrix_setassembleoption(imatassemble)
 #endif
 
@@ -288,7 +288,7 @@ Program Reducedquintic
      if(myrank.eq.0 .and. iprint.ge.1) &
           print *, " Writing simulation parameters"
      
-     call hdf5_write_parameters(ier)
+     if(iwrite_hdf5.eq.1) call hdf5_write_parameters(ier)
   end if
 
   ! output equilibrium time slice
@@ -303,7 +303,7 @@ Program Reducedquintic
         if(iwrite_aux_vars.eq.1) call calculate_auxiliary_fields(0)
      end if
 
-     call hdf5_write_time_slice(1,ier)
+     if(iwrite_hdf5.eq.1) call hdf5_write_time_slice(1,ier)
   end if
 
 
@@ -459,8 +459,12 @@ Program Reducedquintic
         if(mod(ntime-ntime0,ntimepr).eq.0) then
           update_mesh = .true.
         end if
+#ifndef USEPETSC
         call adapt_by_spr(field_vec%id, psi_g, ntime, &
              isprweight, isprmaxsize, isprrefinelevel, isprcoarsenlevel, update_mesh)
+#else
+        if (myrank.eq.0) print *, "SPR adaptation unavailable with USEPETSC build"
+#endif
       endif
     endif
 
@@ -764,6 +768,10 @@ subroutine derived_quantities(ilin)
   ! ~~~~~~~~~
   ier = 0
   if(myrank.eq.0 .and. iprint.ge.2) print *, "  finding temax"
+  if(xmag.ne.xmag .or. zmag.ne.zmag) then
+     xmag = xmag0
+     zmag = zmag0
+  end if
   if(eqsubtract.eq.1) then
      if(linear.eq.1) then 
         if(ntime.eq.ntime0) then

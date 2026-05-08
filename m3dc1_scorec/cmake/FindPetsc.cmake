@@ -13,7 +13,7 @@
 macro(petscLibCheck libs isRequired)
   foreach(lib ${libs}) 
     unset(petsclib CACHE)
-    find_library(petsclib "${lib}" PATHS ${PETSC_LIB_DIR})
+    find_library(petsclib "${lib}" PATHS ${PETSC_LIB_DIR} NO_DEFAULT_PATH)
     if(petsclib MATCHES "^petsclib-NOTFOUND$")
       if(${isRequired})
         message(FATAL_ERROR "PETSC library ${lib} not found in ${PETSC_LIB_DIR}")
@@ -30,15 +30,19 @@ endmacro(petscLibCheck)
 set(PETSC_LIBS "")
 set(PETSC_LIB_NAMES
   petsc
+)
+set(PETSC_OPTIONAL_LIB_NAMES
   parmetis
   metis
 )
 
 petscLibCheck("${PETSC_LIB_NAMES}" TRUE)
+petscLibCheck("${PETSC_OPTIONAL_LIB_NAMES}" FALSE)
 
 find_path(PETSC_INCLUDE_DIR 
   NAMES petsc.h 
-  PATHS ${PETSC_INCLUDE_DIR})
+  PATHS ${PETSC_INCLUDE_DIR}
+  NO_DEFAULT_PATH)
 if(NOT EXISTS "${PETSC_INCLUDE_DIR}")
   message(FATAL_ERROR "PETSC include dir not found")
 endif()
@@ -87,4 +91,3 @@ configure_file(
   @ONLY)
 
 INSTALL(FILES "${CMAKE_BINARY_DIR}/libPetsc.pc" DESTINATION lib/pkgconfig)
-

@@ -412,6 +412,7 @@ subroutine calculate_external_fields(ilin)
   use basic
   use math
   use mesh_mod
+  use mpi
   use sparse
   use arrays
   use coils
@@ -421,8 +422,6 @@ subroutine calculate_external_fields(ilin)
   use gradshafranov
 
   implicit none
-
-  include 'mpif.h'
 
   type(matrix_type) :: br_mat, bf_mat
   type(vector_type) :: psi_vec, bz_vec, p_vec, bf_vec
@@ -852,6 +851,7 @@ end subroutine boundary_rmp
     use basic
     use math
     use mesh_mod
+    use mpi
     use sparse
     use arrays
     use matrix_mod
@@ -860,8 +860,6 @@ end subroutine boundary_rmp
     use boundary_conditions
 
     implicit none
-
-    include 'mpif.h'
 
     type(matrix_type) :: jx_mat
     type(vector_type) :: psi_vec
@@ -1267,5 +1265,4 @@ end subroutine boundary_fstar
 
 
 end module rmp
-
 

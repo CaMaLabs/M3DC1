@@ -1,4 +1,5 @@
 module coils
+  use mpi
   implicit none
 
   integer, parameter :: maxfilaments = 40000
@@ -19,7 +20,7 @@ contains
 
    implicit none
 
-   include 'mpif.h'
+   ! MPI symbols are provided by module coils (`use mpi`)
 
    real, intent(out), dimension(maxfilaments) :: xc, zc  ! coordinates of each coil
    complex, intent(out), dimension(maxfilaments) :: ic   ! current in each coil
@@ -166,7 +167,7 @@ contains
 
    implicit none
 
-   include 'mpif.h'
+   ! MPI symbols are provided by module coils (`use mpi`)
 
    real, intent(in), dimension(nc) :: xc, zc   ! array of coil positions
    complex, intent(in), dimension(nc) :: ic    ! array of coil currents

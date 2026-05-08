@@ -66,7 +66,7 @@ subroutine get_boundary_mask(itri, ibound, imask, tags)
 #endif
 
      call boundary_node(inode(i),is_boundary,izone,izonedim,norm,curv, &
-          x,phi,z,tags)
+          x,phi,z)
      if(.not.is_boundary) cycle
 
      if(iand(ibound, BOUNDARY_CLAMP).eq.BOUNDARY_CLAMP) then

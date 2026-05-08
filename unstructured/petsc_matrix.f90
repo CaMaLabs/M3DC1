@@ -1,6 +1,7 @@
 module petsc_matrix_mod
 
   use element
+  use petsc
 
   implicit none
 
@@ -16,6 +17,8 @@ module petsc_matrix_mod
 
   integer, parameter :: MAT_SET = 0
   integer, parameter :: MAT_ADD = 1
+  integer, parameter :: maxnumofsolves = 4
+  real, allocatable :: kspits(:)
 
   interface clear_mat
      module procedure petsc_matrix_clear
@@ -23,6 +26,7 @@ module petsc_matrix_mod
 
   interface create_mat
      module procedure petsc_matrix_create
+     module procedure petsc_matrix_create_i
   end interface
 
   interface destroy_mat
@@ -131,15 +135,23 @@ contains
     mat%m = m
     mat%n = n
     mat%lhs = lhs
+    if(.not.allocated(kspits)) then
+       allocate(kspits(maxnumofsolves))
+       kspits = 0.
+    end if
 
     global_m = m*global_dofs()
     global_n = n*global_dofs()
     local_m = m*owned_dofs()
     local_n = n*owned_dofs()
 
-    call MatCreateMPIAIJ(PETSC_COMM_WORLD,local_m,local_n,global_m,global_n, &
-         neighbors*dofs_per_node*mat%n, PETSC_NULL_INTEGER, &
-         0, PETSC_NULL_INTEGER, mat%data, ierr)
+    call MatCreateAIJ(PETSC_COMM_WORLD,local_m,local_n,global_m,global_n, &
+         neighbors*dofs_per_node*mat%n, PETSC_NULL_INTEGER_ARRAY, &
+         0, PETSC_NULL_INTEGER_ARRAY, mat%data, ierr)
+    ! The analytical stencil estimate is sometimes too small for the
+    ! current mesh/input combination. Allow PETSc to grow the pattern
+    ! rather than aborting on the first out-of-preallocation entry.
+    call MatSetOption(mat%data, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE, ierr)
 
 !!$    call MPI_COMM_RANK(MPI_COMM_WORLD, myrank, ierr)
 !!$    call MatGetOwnershipRange(mat%data, mrange, nrange, ierr)
@@ -168,12 +180,18 @@ contains
 
     if(lhs) then
        call KSPCreate(PETSC_COMM_WORLD,mat%context,ierr)
-       call KSPSetOperators(mat%context,mat%data,mat%data, &
-            SAME_NONZERO_PATTERN,ierr)
+       call KSPSetOperators(mat%context, mat%data, mat%data, ierr)
        call KSPSetFromOptions(mat%context,ierr)
     end if
 
   end subroutine petsc_matrix_create
+
+  subroutine petsc_matrix_create_i(mat, m, n, icomplex, lhs_i)
+    implicit none
+    type(petsc_matrix) :: mat
+    integer, intent(in) :: m, n, icomplex, lhs_i
+    call petsc_matrix_create(mat, m, n, icomplex, lhs_i.ne.0)
+  end subroutine petsc_matrix_create_i
 
 
   !====================================================================

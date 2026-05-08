@@ -487,6 +487,8 @@ subroutine initial_conditions()
   use basic
   use vector_mod
   use arrays
+  use element
+  use field
 
   use tilting_cylinder
   use taylor_reconnection
@@ -710,6 +712,11 @@ subroutine initial_conditions()
        pe_field(1), p_field(1), ne_field(1), den_field(1), &
        1)
 
+  call sanitize_temperature_field(te_field(0), pefac*p0/max(den0, 1.0e-12))
+  call sanitize_temperature_field(te_field(1), pefac*p0/max(den0, 1.0e-12))
+  call sanitize_temperature_field(ti_field(0), (p0 - pefac*p0)/max(den0, 1.0e-12))
+  call sanitize_temperature_field(ti_field(1), (p0 - pefac*p0)/max(den0, 1.0e-12))
+
   if(iflip_b.eq.1) call mult(bz_field(0), -1.)
   if(iflip_j.gt.0) then 
      call mult(psi_field(0), -1.)
@@ -720,6 +727,36 @@ subroutine initial_conditions()
   if(iflip_v.eq.1) call mult(vz_field(0), -1.)
   if(iflip_v.eq.-1) call mult(vz_field(0), 0.)
 end subroutine initial_conditions
+
+subroutine sanitize_temperature_field(f, fallback)
+  use basic
+  use field
+
+  implicit none
+
+  type(field_type), intent(inout) :: f
+  real, intent(in) :: fallback
+
+  integer :: icounter_tt, inode, numnodes, nsanitized
+  vectype, dimension(dofs_per_node) :: data
+
+  nsanitized = 0
+  numnodes = owned_nodes()
+  do icounter_tt = 1, numnodes
+     inode = nodes_owned(icounter_tt)
+     call get_node_data(f, inode, data)
+     if(any(data .ne. data)) then
+        data = 0.
+        data(1) = fallback
+        call set_node_data(f, inode, data)
+        nsanitized = nsanitized + 1
+     end if
+  end do
+  call sum_shared(f%vec)
+  if(myrank.eq.0 .and. iprint.ge.1 .and. nsanitized.gt.0) then
+     print *, '  sanitized temperature nodes =', nsanitized
+  end if
+end subroutine sanitize_temperature_field
                                                                      
 subroutine kstar_profiles()
 
@@ -844,4 +881,3 @@ subroutine kstar_profiles()
   !call destroy_field(dpsi_dr)
   
 end subroutine kstar_profiles
-

@@ -1,4 +1,5 @@
 module petsc_vector_mod
+  use petsc
 
   implicit none
 
@@ -129,13 +130,14 @@ contains
   ! ~~~~~~
   ! creates a vector of size n
   !======================================================================
-  subroutine petsc_vector_create(v,n)
+  subroutine petsc_vector_create(v,n,prefix)
     use mesh_mod
     implicit none
 #include "finclude/petsc.h"
 
     type(petsc_vector), intent(inout) :: v
     integer, intent(in) :: n
+    character(len=*), intent(in), optional :: prefix
     integer :: i, j, k, l, dofs, ierr, nghost
     integer, pointer :: pghost(:)
     integer, allocatable :: vghost(:)

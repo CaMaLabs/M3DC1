@@ -130,10 +130,9 @@ subroutine coil_feedback(itnum)
   use arrays
   use coils
   use math
+  use mpi
 
   implicit none
-
-  include 'mpif.h'
 
   integer, intent(in) :: itnum
 
@@ -1098,6 +1097,7 @@ subroutine gradshafranov_solve
   use mesh_mod
   use basic
   use arrays
+  use mpi
   use sparse
   use diagnostics
   use newvar_mod
@@ -1107,7 +1107,6 @@ subroutine gradshafranov_solve
   use model
 
   implicit none
-  include 'mpif.h'
 
   type(field_type) :: b1vecini_vec, b2vecini_vec
   type(field_type) :: b3vecini_vec, b4vecini_vec
@@ -1124,7 +1123,7 @@ subroutine gradshafranov_solve
   vectype, dimension(dofs_per_element,dofs_per_element) :: temp
 
   real :: crit_v, max_v
-  real :: norm_1, norm_2, dnorm
+  real :: gs_norm_1, gs_norm_2, gs_dnorm
 
 
 !!$  integer :: is_edge(3)  ! is inode on boundary
@@ -1600,11 +1599,11 @@ endif
            else
               crit_v=sqrt(2*tf2*1.6e-19/fast_ion_mass/m_p)
               max_v=sqrt(2*fast_ion_max_energy*1.6e-19/fast_ion_mass/m_p)
-              norm_1=1./6.*(-crit_v**2*log(crit_v**2-crit_v*max_v+max_v**2)+2*crit_v**2*log(crit_v+max_v)-2*sqrt(3.)*&
+              gs_norm_1=1./6.*(-crit_v**2*log(crit_v**2-crit_v*max_v+max_v**2)+2*crit_v**2*log(crit_v+max_v)-2*sqrt(3.)*&
                  crit_v**2*atan((2*max_v-crit_v)/(sqrt(3.)*crit_v))+3*max_v**2)
-              norm_2=1./6.*(-crit_v**2*log(crit_v**2)+2*crit_v**2*log(crit_v)-2*sqrt(3.)*crit_v**2*atan(-1./sqrt(3.)))
-              dnorm=1./3.*(log(max_v**3+crit_v**3)-log(crit_v**3))
-              temp79a(i) =tf*(norm_1-norm_2)/dnorm*fast_ion_mass*m_p/3.0&
+              gs_norm_2=1./6.*(-crit_v**2*log(crit_v**2)+2*crit_v**2*log(crit_v)-2*sqrt(3.)*crit_v**2*atan(-1./sqrt(3.)))
+              gs_dnorm=1./3.*(log(max_v**3+crit_v**3)-log(crit_v**3))
+              temp79a(i) =tf*(gs_norm_1-gs_norm_2)/gs_dnorm*fast_ion_mass*m_p/3.0&
                  *1.e7 / (b0_norm**2/(4.*pi*n0_norm))!rsae
            endif
         end do
@@ -1763,8 +1762,13 @@ endif
      call eval_ops(itri, pe_field(0), pe079)
      call eval_ops(itri, den_field(0), n079)
      
-     temp79a = (pe079(:,OP_1)) / (z_ion*n079(:,OP_1))
-     temp79b = (p079(:,OP_1) - pe079(:,OP_1)) / n079(:,OP_1)
+     where(real(n079(:,OP_1)).gt.0.)
+        temp79a = pe079(:,OP_1) / (z_ion*n079(:,OP_1))
+        temp79b = (p079(:,OP_1) - pe079(:,OP_1)) / n079(:,OP_1)
+     elsewhere
+        temp79a = 0.
+        temp79b = 0.
+     end where
      
      temp(:,1) = intx2(mu79(:,:,OP_1),temp79a)
      temp(:,2) = intx2(mu79(:,:,OP_1),temp79b)
@@ -1818,10 +1822,9 @@ subroutine calculate_error(error, error2, psinew)
   use field
   use boundary_conditions
   use mesh_mod
+  use mpi
 
   implicit none
-
-  include 'mpif.h'
 
   real, intent(out) :: error, error2
   type(field_type), intent(in) :: psinew
@@ -1888,10 +1891,9 @@ subroutine calculate_gamma(g2, g3, g4)
   use arrays
   use m3dc1_nint
   use math
+  use mpi
 
   implicit none
-
-  include 'mpif.h'
 
   real, intent(out) :: g2, g3, g4
 
@@ -2016,10 +2018,9 @@ subroutine deltafun(x,z,val,jout)
   use field
   use m3dc1_nint
   use math
+  use mpi
 
   implicit none
-
-  include 'mpif.h'
 
   type(element_data) :: d
   real, intent(in) :: x, z, val
@@ -2087,10 +2088,9 @@ subroutine gaussianfun(x,z,val,denom,jout)
   use field
   use m3dc1_nint
   use math
+  use mpi
 
   implicit none
-
-  include 'mpif.h'
 
   real, intent(in) :: x, z, val, denom
   type(field_type), intent(inout) :: jout
@@ -2375,14 +2375,13 @@ subroutine fundef2(error)
   use basic
   use mesh_mod
   use arrays
+  use mpi
   use sparse
   use newvar_mod
   use m3dc1_nint
   use diagnostics
 
   implicit none
-
-  include 'mpif.h'
 
   real, intent(out) :: error
 
@@ -2880,10 +2879,9 @@ end subroutine readpgfiles
  subroutine calculate_gs_error(error)
    use basic
    use m3dc1_nint
+   use mpi
    
    implicit none
-   
-   include 'mpif.h'
    
    real, intent(out) :: error
    

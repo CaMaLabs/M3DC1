@@ -7,6 +7,7 @@ module m3dc1_output
   integer :: iwrite_aux_vars
   integer :: iwrite_adjacency
   integer :: iwrite_quad_points
+  integer :: iwrite_hdf5
 
 contains
 
@@ -16,6 +17,8 @@ contains
     implicit none
 
     integer :: ier
+
+    if(iwrite_hdf5.eq.0) return
     
     allocate(gamma_buffer(nt_gamma_gr))
     gamma_buffer = 0.0
@@ -40,6 +43,8 @@ contains
 
     integer :: ier
 
+    if(iwrite_hdf5.eq.0) return
+
     if(myrank.eq.0) then
        close(ke_file)
     end if
@@ -63,10 +68,9 @@ contains
     use hdf5_output
     use diagnostics
     use auxiliary_fields
+    use mpi
 
     implicit none
-
-    include 'mpif.h'
 
     integer :: ier,i
     call mark_fields(0);
@@ -86,13 +90,14 @@ contains
     use auxiliary_fields
     use particles
     use signal_handler
+    use mpi
 
     implicit none
 
-    include 'mpif.h'
-
     integer :: ier
     real :: tstart, tend, diff, gamma_std, gamma_mean
+
+    if(iwrite_hdf5.eq.0) return
 
     if(myrank.eq.0 .and. itimer.eq.1) call second(tstart)
     call hdf5_write_scalars(ier)
@@ -222,6 +227,7 @@ subroutine hdf5_write_parameters(error)
   use hdf5
   use hdf5_output
   use basic
+  use mesh_mod
   use pellet
   use bootstrap
   use diagnostics
@@ -667,10 +673,9 @@ subroutine hdf5_write_time_slice(equilibrium, error)
   use hdf5
   use hdf5_output
   use basic
+  use mpi
 
   implicit none
-
-  include 'mpif.h'
   
   integer, intent(out) :: error
   integer, intent(in) :: equilibrium

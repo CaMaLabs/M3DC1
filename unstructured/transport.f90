@@ -1580,6 +1580,7 @@ subroutine define_transport_coefficients()
 
   use basic
   use arrays
+  use mpi
   use m3dc1_nint
   use newvar_mod
   use sparse
@@ -1589,8 +1590,6 @@ subroutine define_transport_coefficients()
   use kprad_m3dc1
 
   implicit none
-
-  include 'mpif.h'
 
   integer :: itri, izone, izone_index
   integer :: numelms, def_fields,ier

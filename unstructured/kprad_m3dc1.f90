@@ -269,6 +269,7 @@ contains
 
   subroutine kprad_advect(dti)
     use basic
+    use mpi
     use matrix_mod
     use m3dc1_nint
     use boundary_conditions
@@ -276,8 +277,6 @@ contains
     use sparse
 
     implicit none
-
-    include 'mpif.h'
 
     real, intent(in) :: dti
     type(matrix_type) :: nmat_lhs, nmat_rhs
@@ -726,14 +725,13 @@ contains
 
   subroutine read_lp_source(filename, ierr)
     use basic
+    use mpi
     use read_ascii
     use pellet
     use newvar_mod
     use math
 
     implicit none
-
-    include 'mpif.h'
 
     integer :: mpierr
     integer, intent(out) :: ierr
@@ -869,14 +867,13 @@ subroutine deltafuns(n,x,phi,z,m,val,jout, ier)
 
   use mesh_mod
   use basic
+  use mpi
   use arrays
   use field
   use m3dc1_nint
   use math
 
   implicit none
-
-  include 'mpif.h'
 
   integer, intent(in) :: n, m
   real, intent(in), dimension(n) :: x, phi, z
