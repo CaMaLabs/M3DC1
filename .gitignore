@@ -8,6 +8,16 @@ _*
 *.mod
 *.o
 
+# Local analysis outputs / caches
+__pycache__/
+results/
+*.pid
+*.heartbeat
+*.log
+
+# CMake/Ninja build trees outside the default "_*" convention
+m3dc1_scorec/build*/
+
 # Ignore mesh files
 *.smb
 *.dmg
@@ -53,4 +63,3 @@ doc/*
 !unstructured/doc/*.tex
 !readme
 !figures/*
-

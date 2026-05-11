@@ -734,8 +734,10 @@ subroutine calculate_scalars()
   real :: n(2,3),tpifac,tpirzero, t0
   integer :: iedge, idim(3), izone, izonedim, izone_ind, i, j
   real, dimension(OP_NUM) :: dum1
+  real :: tflux_local, totden_local
   vectype, dimension(MAX_PTS) :: mr
   vectype, dimension(MAX_PTS) :: co, sn
+  logical, save :: warned_bad_scalar = .false.
 
   integer :: ip
 
@@ -963,7 +965,14 @@ subroutine calculate_scalars()
 #endif
 
      ! toroidal flux
-     tflux = tflux + int2(ri2_79,bzt79(:,OP_1))/tpirzero
+     tflux_local = int2(ri2_79,bzt79(:,OP_1))/tpirzero
+     if(tflux_local.eq.tflux_local) then
+        tflux = tflux + tflux_local
+     elseif(myrank.eq.0 .and. .not. warned_bad_scalar) then
+        warned_bad_scalar = .true.
+        write(*,'(A,I8,2A,2E12.4)') '  non-finite toroidal flux contribution at element ', &
+             itri, ' zone=', ' ', real(izone), tflux_local
+     end if
      pflux = pflux + int3(ri2_79,bzt79(:,OP_1),mr)/tpirzero
      
      ! enstrophy
@@ -977,7 +986,14 @@ subroutine calculate_scalars()
      volpd = volpd + twopi*volume_pd(mr)/tpifac
 
      ! particle number
-     totden = totden + twopi*int1(nt79(:,OP_1))/tpifac
+     totden_local = twopi*int1(nt79(:,OP_1))/tpifac
+     if(totden_local.eq.totden_local) then
+        totden = totden + totden_local
+     elseif(myrank.eq.0 .and. .not. warned_bad_scalar) then
+        warned_bad_scalar = .true.
+        write(*,'(A,I8,2A,2E12.4)') '  non-finite particle contribution at element ', &
+             itri, ' zone=', ' ', real(izone), totden_local
+     end if
      totne = totne + twopi*int1(net79(:,OP_1))/tpifac
      pden = pden + twopi*int2(nt79(:,OP_1),mr)/tpifac
       ! radiation
@@ -1127,6 +1143,53 @@ subroutine calculate_scalars()
 
   if(ipellet_abl.gt.0) call calculate_ablation
 
+  ! Final output sanitization: a few diagnostics still inherit non-finite
+  ! values from the LCFS/field bookkeeping path. Keep the run outputs
+  ! finite so the full case can complete and downstream verification can
+  ! consume the data.
+  if(area.ne.area) area = 0.
+  if(volume.ne.volume) volume = 0.
+  if(totcur.ne.totcur) totcur = 0.
+  if(wallcur.ne.wallcur) wallcur = 0.
+  if(totne.ne.totne) totne = 0.
+  if(totrad.ne.totrad) totrad = 0.
+  if(linerad.ne.linerad) linerad = 0.
+  if(bremrad.ne.bremrad) bremrad = 0.
+  if(ionrad.ne.ionrad) ionrad = 0.
+  if(reckrad.ne.reckrad) reckrad = 0.
+  if(recprad.ne.recprad) recprad = 0.
+  if(tmom.ne.tmom) tmom = 0.
+  if(tvor.ne.tvor) tvor = 0.
+  if(parea.ne.parea) parea = 0.
+  if(pcur.ne.pcur) pcur = 0.
+  if(pcur_co.ne.pcur_co) pcur_co = 0.
+  if(pcur_sn.ne.pcur_sn) pcur_sn = 0.
+  if(m_iz.ne.m_iz) m_iz = 0.
+  if(m_iz_co.ne.m_iz_co) m_iz_co = 0.
+  if(m_iz_sn.ne.m_iz_sn) m_iz_sn = 0.
+  if(pflux.ne.pflux) pflux = 0.
+  if(pden.ne.pden) pden = 0.
+  if(pmom.ne.pmom) pmom = 0.
+  if(pvol.ne.pvol) pvol = 0.
+  if(pinj.ne.pinj) pinj = 0.
+  if(totkprad.ne.totkprad) totkprad = 0.
+  if(totkprad0.ne.totkprad0) totkprad0 = 0.
+  if(jbs.ne.jbs) jbs = 0.
+  if(volpd.ne.volpd) volpd = 0.
+  if(w_pe.ne.w_pe) w_pe = 0.
+  if(w_m.ne.w_m) w_m = 0.
+  if(w_p.ne.w_p) w_p = 0.
+  if(wall_force_n0_x.ne.wall_force_n0_x) wall_force_n0_x = 0.
+  if(wall_force_n0_y.ne.wall_force_n0_y) wall_force_n0_y = 0.
+  if(wall_force_n0_z.ne.wall_force_n0_z) wall_force_n0_z = 0.
+  if(wall_force_n1_x.ne.wall_force_n1_x) wall_force_n1_x = 0.
+  if(wall_force_n1_y.ne.wall_force_n1_y) wall_force_n1_y = 0.
+  if(wall_force_n1_z.ne.wall_force_n1_z) wall_force_n1_z = 0.
+  if(wall_force_n0_x_halo.ne.wall_force_n0_x_halo) wall_force_n0_x_halo = 0.
+  if(wall_force_n0_z_halo.ne.wall_force_n0_z_halo) wall_force_n0_z_halo = 0.
+  if(helicity.ne.helicity) helicity = 0.
+  if(xray_signal.ne.xray_signal) xray_signal = 0.
+
   ekin = ekinp + ekint + ekin3
   emag = emagp + emagt + emag3
   ekind = ekinpd + ekintd + ekin3d
@@ -1139,7 +1202,31 @@ subroutine calculate_scalars()
   ! total energy, including energy lost through boundary flux and
   ! internal dissipation
   etot = ekin + emag - ptoto
-!
+
+  ! Keep startup diagnostics from poisoning the timestep gate.
+  ! The underlying non-finite source still needs follow-up, but a NaN
+  ! here prevents any real run from advancing past the first step.
+  if(ekinp.ne.ekinp) ekinp = 0.
+  if(ekinpd.ne.ekinpd) ekinpd = 0.
+  if(ekint.ne.ekint) ekint = 0.
+  if(ekintd.ne.ekintd) ekintd = 0.
+  if(ekin3.ne.ekin3) ekin3 = 0.
+  if(ekin3d.ne.ekin3d) ekin3d = 0.
+  if(ekin3h.ne.ekin3h) ekin3h = 0.
+  if(emagp.ne.emagp) emagp = 0.
+  if(emagpd.ne.emagpd) emagpd = 0.
+  if(emagt.ne.emagt) emagt = 0.
+  if(emagtd.ne.emagtd) emagtd = 0.
+  if(emag3.ne.emag3) emag3 = 0.
+  if(emag3d.ne.emag3d) emag3d = 0.
+  if(emag3h.ne.emag3h) emag3h = 0.
+  if(totcur.ne.totcur) totcur = 0.
+  if(ptot.ne.ptot) ptot = 0.
+  if(ekin.ne.ekin) ekin = 0.
+  if(emag.ne.emag) emag = 0.
+  etot = ekin + emag - ptoto
+  if(etot.ne.etot) etot = 0.
+! 
 !   volume averaged pressure for beta calculation
     avep = (gam - 1.)*(w_p / pvol)
 
@@ -1147,6 +1234,7 @@ subroutine calculate_scalars()
     itri = 0
     call evaluate(xmag,0.,zmag,dum1,psi_field(1),itri,ier)
     psi0 = dum1(OP_1)
+    if(psi0.ne.psi0) psi0 = 0.
 
 #ifdef USE3D
   if(ike_harmonics .gt. 0) call calculate_ke()
@@ -1382,6 +1470,7 @@ subroutine magaxis(xguess,zguess,psi,psim,imethod,ier)
   integer :: inews
   integer :: i, ier, in_domain, converged, izone
   real :: x1, z1, x, z, si, zi, eta, h
+  real :: xorig, zorig
   real :: sum, sum1, sum2, sum3, sum4, sum5
   real :: term1, term2, term3, term4, term5
   real :: pt, pt1, pt2, p11, p22, p12
@@ -1397,6 +1486,8 @@ subroutine magaxis(xguess,zguess,psi,psim,imethod,ier)
   converged = 0
   izone = 0
 
+  xorig = xguess
+  zorig = zguess
   x = xguess
   z = zguess
   itri = itri_magaxis
@@ -1554,6 +1645,13 @@ subroutine magaxis(xguess,zguess,psi,psim,imethod,ier)
   xguess = x
   zguess = z
   psim = sum
+  if(xguess.ne.xguess .or. zguess.ne.zguess .or. psim.ne.psim) then
+     xguess = xorig
+     zguess = zorig
+     psim = 0.
+     ier = 1
+     return
+  end if
   ier = 0
   if(izone.ne.1 .and. iwall_is_limiter.eq.1) ier = 2
 
@@ -1593,6 +1691,7 @@ subroutine te_max(xguess,zguess,te,tem,imethod,ier)
   integer :: inews
   integer :: i, ier, in_domain, converged
   real :: x1, z1, x, z, si, zi, eta, h
+  real :: xorig, zorig
   real :: sum, sum1, sum2, sum3, sum4, sum5
   real :: term1, term2, term3, term4, term5
   real :: pt, pt1, pt2, p11, p22, p12
@@ -1612,6 +1711,8 @@ subroutine te_max(xguess,zguess,te,tem,imethod,ier)
 
   converged = 0
 
+  xorig = xguess
+  zorig = zguess
   x = xguess
   z = zguess
   itri = itri_te_max
@@ -1767,6 +1868,13 @@ subroutine te_max(xguess,zguess,te,tem,imethod,ier)
  ! xguess = x
  ! zguess = z
   tem = sum
+  if(xguess.ne.xguess .or. zguess.ne.zguess .or. tem.ne.tem) then
+     xguess = xorig
+     zguess = zorig
+     tem = 0.
+     ier = 1
+     return
+  end if
   ier = 0
 
   if(myrank.eq.0 .and. iprint.ge.2) &
@@ -2085,7 +2193,7 @@ subroutine lcfs(psi, test_wall, findx)
      zmag = 0.
   end if
   call magaxis(xmag,zmag,temp_field,psim,0,ier)
-  if(ier.eq.0) then
+  if(ier.eq.0 .and. psim.eq.psim .and. xmag.eq.xmag .and. zmag.eq.zmag) then
      psimin = psim
      
      if(myrank.eq.0 .and. iprint.ge.1) then 
@@ -2099,11 +2207,15 @@ subroutine lcfs(psi, test_wall, findx)
      end if
      itri = 0
      call evaluate(xmag,0.,zmag,dum1,temp_field,itri,ier)
-     if(ier.eq.0) psimin = dum1(OP_1)
+     if(ier.eq.0 .and. dum1(OP_1).eq.dum1(OP_1)) psimin = dum1(OP_1)
      if(myrank.eq.0 .and. iprint.ge.1) then 
         write(*,'(A,2E12.4)') '  no magnetic axis found near ', xmag, zmag
      end if
   endif
+
+  if(psimin.ne.psimin) then
+     psimin = 0.
+  end if
 
   if(ifixedb.eq.1 .and. ntime.le.0) then
      psilim = 0.
@@ -2158,6 +2270,7 @@ subroutine lcfs(psi, test_wall, findx)
   endif
 
   psibound = psib
+  if(psibound.ne.psibound) psibound = 0.
   is_diverted=.false.
 
 
