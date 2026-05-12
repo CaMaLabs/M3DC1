@@ -600,6 +600,13 @@ subroutine safestop(iarg)
   integer, intent(in) :: iarg
   integer :: ier
   character*10 :: datec, timec
+  logical :: do_full_cleanup
+
+  ! `safestop` is called from many places, including early input validation.
+  ! A subset of teardown routines assume the mesh/matrices/output have been
+  ! initialized. Use `sparse_initialized` (set after `space(1)` in main) as a
+  ! conservative proxy for "full runtime initialized".
+  do_full_cleanup = sparse_initialized
 
 #ifdef USEST
   if (igeometry.eq.1 .and. ilog.ne.-1) then
@@ -615,24 +622,26 @@ subroutine safestop(iarg)
   endif
 #endif
 
-  call destroy_auxiliary_fields
-  if(irunaway .eq. 2) call runaway_deallocate
-  call kprad_destroy
-  call destroy_resistive_wall
+  if (do_full_cleanup) then
+    call destroy_auxiliary_fields
+    if(irunaway .eq. 2) call runaway_deallocate
+    call kprad_destroy
+    call destroy_resistive_wall
 
-  call destroy_wall_dist
+    call destroy_wall_dist
 
-  call finalize_timestep
+    call finalize_timestep
 
-  ! close hdf5 file
-  if(myrank.eq.0 .and. iprint.ge.2) print *, "  finalizing output..."
-  call finalize_output
+    ! close hdf5 file
+    if(myrank.eq.0 .and. iprint.ge.2) print *, "  finalizing output..."
+    call finalize_output
 
-  if(myrank.eq.0 .and. iprint.ge.2) print *, "  deleting matrices..."
-  call delete_matrices
+    if(myrank.eq.0 .and. iprint.ge.2) print *, "  deleting matrices..."
+    call delete_matrices
 
-  if(myrank.eq.0 .and. iprint.ge.2) print *, "  unloading mesh..."
-  call unload_mesh
+    if(myrank.eq.0 .and. iprint.ge.2) print *, "  unloading mesh..."
+    call unload_mesh
+  endif
 
 #ifndef M3DC1_TRILINOS
   if(myrank.eq.0 .and. iprint.ge.2) print *, "  finalizing PETSC..."

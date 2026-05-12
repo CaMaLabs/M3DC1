@@ -1,5 +1,7 @@
 # Ignore all build directories.  These are preceded by "_"
 _*
+!unstructured/_localgnu-petsc-opt-25/m3dc1_2d
+!unstructured/_localgnu-petsc-3d-opt-125/m3dc1_3d
 
 # Ignore autosave files
 *~
@@ -14,6 +16,11 @@ results/
 *.pid
 *.heartbeat
 *.log
+
+# Local run artifacts
+unstructured/runs/
+unstructured/finclude/
+skeleton/**/m3dc1_skeleton
 
 # CMake/Ninja build trees outside the default "_*" convention
 m3dc1_scorec/build*/

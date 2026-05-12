@@ -1362,6 +1362,9 @@ subroutine validate_input
 #endif
 
   integer :: ier,i
+  logical :: allow_3d_single_plane
+  character(len=32) :: env_allow_3d_single_plane
+  integer :: env_len, env_stat
   real :: de
 
   if(myrank.eq.0) then
@@ -1372,9 +1375,24 @@ subroutine validate_input
   
 !...check if correct code version is being used
 #if defined(USE3D)
+    allow_3d_single_plane = .false.
+    env_allow_3d_single_plane = ''
+    env_len = 0
+    env_stat = 1
+    call get_environment_variable('M3DC1_ALLOW_3D_SINGLE_PLANE', env_allow_3d_single_plane, &
+         length=env_len, status=env_stat)
+    if (env_stat.eq.0 .and. env_len.gt.0) then
+      ! Treat any non-'0' value as enabled.
+      if (env_allow_3d_single_plane(1:1).ne.'0') allow_3d_single_plane = .true.
+    end if
+
     if(nplanes.le.1) then
-      if(myrank.eq.0) print *, "must have nplanes>1 for 3D version"
-      call safestop(1)
+      if (allow_3d_single_plane) then
+        if(myrank.eq.0) print *, "WARNING: allowing USE3D run with nplanes<=1 (M3DC1_ALLOW_3D_SINGLE_PLANE=1)"
+      else
+        if(myrank.eq.0) print *, "must have nplanes>1 for 3D version"
+        call safestop(1)
+      end if
     endif
 #endif
 
@@ -1390,8 +1408,16 @@ subroutine validate_input
       ier = 1
 #endif
       if(ier.ne.0) then
-        if(myrank.eq.0) print *,"must use RL version for linear.eq.0 .and. nplanes.eq.1"
-        call safestop(1)
+#if defined(USE3D)
+        if (allow_3d_single_plane) then
+          if(myrank.eq.0) print *,"WARNING: bypassing RL-only check for linear.eq.0 and nplanes.eq.1 (USE3D single-plane override)"
+          ier = 0
+        end if
+#endif
+        if(ier.ne.0) then
+          if(myrank.eq.0) print *,"must use RL version for linear.eq.0 .and. nplanes.eq.1"
+          call safestop(1)
+        endif
       endif
     endif
 
@@ -1604,7 +1630,10 @@ subroutine validate_input
 #endif
 
 #if defined(USE3D) && defined(USEPETSC)
-  if(maxrank+1.ne.nplanes) then 
+  ! In this codebase, maxrank is set from MPI_Comm_size(), i.e. it is the
+  ! number of ranks (not the maximum rank id). For 3D+PETSc, we currently
+  ! require one MPI rank per toroidal plane.
+  if(maxrank.ne.nplanes) then 
      print *, 'Must run with procs = nplanes'
      call safestop(1)
   end if

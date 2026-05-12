@@ -4,6 +4,15 @@ module scorec_mesh_mod
 
   implicit none
 
+  ! SCOREC C API functions return integer status codes. Declare them as
+  ! external functions so they are used consistently across this module.
+  integer, external :: m3dc1_model_load
+  integer, external :: m3dc1_model_setnumplane
+  integer, external :: m3dc1_mesh_load
+  integer, external :: m3dc1_mesh_getnument
+  integer, external :: m3dc1_plane_setphi
+  integer, external :: m3dc1_mesh_build3d
+
   logical :: is_rectilinear
 
   real :: xzero, zzero
@@ -86,6 +95,7 @@ contains
     implicit none
 
     integer :: myrank, maxrank, ier
+    integer :: rc
     logical :: exists_on_disk
     include 'mpif.h'
 #ifdef USE3D
@@ -157,27 +167,67 @@ contains
     else
        if(myrank.eq.0) print *, 'curved mesh model...'
     endif
+    inquire(file=trim(mesh_model), exist=exists_on_disk)
+    if (.not. exists_on_disk) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] mesh model file "', trim(mesh_model), '" does not exist'
+       call safestop(1)
+    end if
     if(myrank.eq.0) print *, 'DEBUG scorec step 1: before model_load'
     write(name_buff,"(A,A)") mesh_model(1:len_trim(mesh_model)),0
-    call m3dc1_model_load(name_buff)
+    rc = m3dc1_model_load(name_buff)
+    if (rc.ne.0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_model_load failed with rc=', rc
+       call safestop(1)
+    end if
     if(myrank.eq.0) print *, 'DEBUG scorec step 1: after model_load'
 
     if(myrank.eq.0) print *, 'setting number of planes = ', nplanes
     if(myrank.eq.0) print *, 'DEBUG scorec step 2: before setnumplane'
-    call m3dc1_model_setnumplane(nplanes)
+    rc = m3dc1_model_setnumplane(nplanes)
+    if (rc.ne.0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_model_setnumplane failed with rc=', rc
+       call safestop(1)
+    end if
     if(myrank.eq.0) print *, 'DEBUG scorec step 2: after setnumplane'
 
-    procs_per_plane = (maxrank+1)/nplanes
+    ! maxrank comes from MPI_Comm_size(), so it is the number of ranks.
+    procs_per_plane = maxrank/nplanes
     if(myrank.eq.0) &
          print *, 'number of processes per plane = ', procs_per_plane
 
+    inquire(file=trim(mesh_filename), exist=exists_on_disk)
+    if (.not. exists_on_disk) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] mesh file "', trim(mesh_filename), '" does not exist'
+       call safestop(1)
+    end if
     if(myrank.eq.0) print *, 'DEBUG scorec step 3: before mesh_load'
     write(name_buff,"(A,A)")  mesh_filename(1:len_trim(mesh_filename)),0
-    call m3dc1_mesh_load (name_buff)
+    rc = m3dc1_mesh_load(name_buff)
+    if (rc.ne.0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_mesh_load failed with rc=', rc
+       call safestop(1)
+    end if
     if(myrank.eq.0) print *, 'DEBUG scorec step 3: after mesh_load'
 
+    ! If the load failed inside the SCOREC layer, subsequent calls into the
+    ! mesh API can segfault. Probe for a non-empty mesh and stop cleanly.
     num3d = 0
-    call m3dc1_mesh_getnument(3, num3d)
+    rc = m3dc1_mesh_getnument(0, num3d)
+    if (rc.ne.0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_mesh_getnument failed with rc=', rc
+       call safestop(1)
+    end if
+    if (num3d .le. 0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] mesh_load did not produce a valid mesh; aborting to avoid crash'
+       call safestop(1)
+    end if
+
+    num3d = 0
+    rc = m3dc1_mesh_getnument(3, num3d)
+    if (rc.ne.0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_mesh_getnument(dim=3) failed with rc=', rc
+       call safestop(1)
+    end if
     if (myrank.eq.0) print *, 'DEBUG scorec mesh dim probe: num3d=', num3d
 
     if (num3d .le. 0) then
@@ -197,7 +247,11 @@ contains
                 call safestop(8)
              end if
              if(myrank.eq.0) print *, 'DEBUG scorec step 4: before plane_setphi idx=', i-1
-             call m3dc1_plane_setphi(i-1, xvals(i))
+             rc = m3dc1_plane_setphi(i-1, xvals(i))
+             if (rc.ne.0) then
+                if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_plane_setphi failed with rc=', rc
+                call safestop(8)
+             end if
              if(myrank.eq.0) print *, 'DEBUG scorec step 4: after plane_setphi idx=', i-1
              if(myrank.eq.0) print *, 'Plane ', i, 'at angle ', xvals(i)
           end do
@@ -214,14 +268,22 @@ contains
                 angle = toroidal_period*real(i)/real(nplanes)
              end if
              if(myrank.eq.0) print *, 'DEBUG scorec step 4: before plane_setphi idx=', i
-             call m3dc1_plane_setphi(i, angle)
+             rc = m3dc1_plane_setphi(i, angle)
+             if (rc.ne.0) then
+                if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_plane_setphi failed with rc=', rc
+                call safestop(8)
+             end if
              if(myrank.eq.0) print *, 'DEBUG scorec step 4: after plane_setphi idx=', i
              if(myrank.eq.0) print *, 'Plane ', i+1, 'at angle ', angle
           end do
        end if
        if(myrank.eq.0) print *, 'setting up 3D mesh...'
        if(myrank.eq.0) print *, 'DEBUG scorec step 5: before mesh_build3d'
-       call m3dc1_mesh_build3d(0,0,0)
+       rc = m3dc1_mesh_build3d(0,0,0)
+       if (rc.ne.0) then
+          if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_mesh_build3d failed with rc=', rc
+          call safestop(1)
+       end if
        if(myrank.eq.0) print *, 'DEBUG scorec step 5: after mesh_build3d'
     else
        if (myrank.eq.0) print *, 'DEBUG scorec: mesh already 3D, skipping plane_setphi/mesh_build3d'
@@ -253,7 +315,11 @@ contains
           end if
        end if
        write(name_buff,"(A,A)")  mesh_model(1:len_trim(mesh_model)),0
-       call m3dc1_model_load(name_buff)
+       rc = m3dc1_model_load(name_buff)
+       if (rc.ne.0) then
+          if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_model_load failed with rc=', rc
+          call safestop(1)
+       end if
     end if
     if (len_trim(mesh_filename) .le. 0) then
        if (myrank .eq. 0) then
@@ -269,7 +335,11 @@ contains
        call safestop(8)
     end if
     write(name_buff,"(A,A)")  mesh_filename(1:len_trim(mesh_filename)),0
-    call m3dc1_mesh_load (name_buff)
+    rc = m3dc1_mesh_load(name_buff)
+    if (rc.ne.0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_mesh_load failed with rc=', rc
+       call safestop(1)
+    end if
 #endif
     call update_nodes_owned
 
@@ -397,11 +467,16 @@ contains
   integer function local_elements()
     implicit none
     integer :: elem_dim
+    integer :: rc
     elem_dim = 2
 #ifdef USE3D
     elem_dim = 3
 #endif
-    call m3dc1_mesh_getnument(elem_dim, local_elements)
+    rc = m3dc1_mesh_getnument(elem_dim, local_elements)
+    if (rc.ne.0) then
+       print *, '[M3D-C1 ERROR] m3dc1_mesh_getnument failed with rc=', rc
+       call safestop(1)
+    end if
   end function local_elements
 
   !==============================================================
@@ -447,7 +522,12 @@ contains
   !==============================================================
   integer function local_nodes()
     implicit none
-    call m3dc1_mesh_getnument(0, local_nodes)
+    integer :: rc
+    rc = m3dc1_mesh_getnument(0, local_nodes)
+    if (rc.ne.0) then
+       print *, '[M3D-C1 ERROR] m3dc1_mesh_getnument failed with rc=', rc
+       call safestop(1)
+    end if
   end function local_nodes
 
   !==============================================================
@@ -480,7 +560,11 @@ contains
     elem_dim = 3
 #endif
 #ifdef DEBUG
-    call m3dc1_mesh_getnument(elem_dim, numelm)
+    rc = m3dc1_mesh_getnument(elem_dim, numelm)
+    if (rc.ne.0) then
+       if (myrank.eq.0) print *, '[M3D-C1 ERROR] m3dc1_mesh_getnument failed with rc=', rc
+       call safestop(1)
+    end if
     if (ielm-1 .ge. numelm) then
        print *, "ielm ", ielm, " should be equal to or less than ", numelm
     endif
