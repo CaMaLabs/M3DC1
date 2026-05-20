@@ -1,8 +1,57 @@
 # M3DC1 Validation Harness
 
-This repository is being used as the M3D-C1-side validation workspace for the TCT/liquid-lithium fusion concept.
+This repository is Chase Lunsford's public M3D-C1-side validation workspace for the TCT / liquid-lithium fusion concept.
 
-The current goal is **not** to prove TCT from scratch. Prior work is treated as the external foundation. This repo is for testing whether a TCT-like control translation produces useful edge/current-sheet stabilization behavior in an M3D-C1-compatible workflow.
+The current goal is **not** to prove TCT from scratch. Prior optimizer and blanket-design work is treated as the external foundation. This repo is for testing whether a TCT-like control translation produces useful edge/current-sheet stabilization behavior in an M3D-C1-compatible workflow.
+
+## Research purpose
+
+This repository exists to bridge the fusion blanket / TCT concept into a more mainstream plasma-validation direction.
+
+The core validation question is:
+
+> Can the candidate reactor/control concept be translated into a plasma-side validation campaign that tests baseline behavior against weak, moderate, and aggressive TCT-like stabilization analogs, including lithium-wall current coupling?
+
+The repository is public to preserve provenance, assumptions, candidate definitions, harness code, generated case matrices, and validation boundaries in a timestamped development history.
+
+## Current status
+
+This is an active independent research and validation-harness repository. It should be read as a staging and translation layer, not as a completed M3D-C1 physics result.
+
+Current emphasis:
+
+- keep the frozen Candidate-0 target explicit,
+- generate a controlled case matrix,
+- preserve deterministic proxy checks for harness testing,
+- define a backend diagnostics extraction contract,
+- avoid silent false-success outputs,
+- and prepare for real M3D-C1 / backend diagnostic ingestion when available.
+
+## What is validated vs. exploratory
+
+### More concrete / implemented
+
+- Public repository and timestamped development history.
+- Candidate-0 configuration target.
+- Case-matrix generation.
+- Deterministic proxy physics harness for workflow testing.
+- Constraint gates and explicit status labels.
+- Backend diagnostics JSON ingestion contract.
+- CSV output intended to keep failed or partial cases inspectable.
+
+### Exploratory / not yet proven here
+
+- Real M3D-C1 compiled-solver validation of the TCT analog.
+- Physical effectiveness of TCT-style control in the real plasma edge.
+- Physical effectiveness of lithium-current coupling as an actuator.
+- Whether proxy improvements survive high-fidelity plasma simulation.
+- Whether this candidate is reactor-practical after full plasma, neutronics, thermal, and materials analysis.
+
+## Provenance
+
+Author / researcher: Chase Lunsford (`@chaseakat`).
+
+This repo was made public to establish visible provenance for the M3D-C1 validation path connected to the fusion blanket / thickness-controlled tokamak research. The commit history, candidate JSON, generated matrices, scripts, and README notes should be treated as part of the public timestamped record of development.
 
 ## Frozen validation target
 
@@ -160,3 +209,7 @@ These are validation gates, not final reactor licensing limits. Update them only
 ## Build note
 
 The upstream M3D-C1 stack is dependency-heavy. The included Spack recipe references MPI, HDF5, NetCDF, PETSc, SuperLU_DIST, GSL, FFTW, Zoltan, and PUMI. Use `scripts/bootstrap_spack_m3dc1.sh` as the starting point, but expect local HPC/Linux dependency tuning.
+
+## Citation / attribution request
+
+If this repository, its candidate structures, scripts, or TCT-related validation framing influence downstream work, please cite or link back to this repo and credit Chase Lunsford / `@chaseakat`.
