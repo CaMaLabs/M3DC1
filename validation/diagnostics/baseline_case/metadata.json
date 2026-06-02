@@ -1,0 +1,33 @@
+{
+  "code": "M3D-C1",
+  "case_name": "baseline_case",
+  "backend": "real_m3dc1_pending",
+  "status": "placeholder",
+  "description": "Baseline M3D-C1 diagnostic bundle placeholder. This file defines the required artifacts for replacing proxy smoke diagnostics with real M3D-C1 output. Do not treat this as validation evidence until the listed CSV/log files are exported from an actual M3D-C1 run.",
+  "intended_use": "Reference baseline for comparing a later TCT-modified case against an unmodified M3D-C1-compatible run.",
+  "required_outputs": {
+    "run_log": "run.log",
+    "time_history": "time_history.csv",
+    "energy_history": "energy_history.csv",
+    "mode_history": "mode_history.csv",
+    "current_profile": "current_profile.csv",
+    "pressure_profile": "pressure_profile.csv"
+  },
+  "minimum_columns": {
+    "time_history.csv": ["step", "time", "dt"],
+    "energy_history.csv": ["time", "magnetic_energy", "kinetic_energy", "thermal_energy", "total_energy"],
+    "mode_history.csv": ["time", "mode_id", "amplitude"],
+    "current_profile.csv": ["rho", "j_parallel", "j_toroidal"],
+    "pressure_profile.csv": ["rho", "pressure"]
+  },
+  "primary_metric": {
+    "name": "linear_mode_growth_rate",
+    "source_file": "mode_history.csv",
+    "method": "Fit slope of log(amplitude) versus time over the linear growth window."
+  },
+  "comparison_target": "validation/diagnostics/tct_modified_case/metadata.json",
+  "notes": [
+    "This baseline should be generated from the same equilibrium, mesh, solver settings, and timestep policy used by the TCT-modified case, except with the TCT-inspired modification disabled.",
+    "Commit real diagnostics separately from this placeholder so reviewers can distinguish schema setup from validation evidence."
+  ]
+}
