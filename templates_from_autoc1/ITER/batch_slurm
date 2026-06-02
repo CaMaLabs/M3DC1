@@ -1,0 +1,7 @@
+#!/bin/bash -vx
+
+BASH_COMMAND
+
+# Run M3D-C1
+rm -f C1stdout
+EXEC_COMMAND

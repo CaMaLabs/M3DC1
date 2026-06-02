@@ -199,7 +199,9 @@ def proxy_physics(case: Dict[str, Any]) -> Dict[str, float]:
     wall_loading = neutron_power / wall_area if wall_area > 0 else float("nan")
 
     # TBR proxy rewards Li thickness and Be topology, penalizes excessive wall loading.
-    TBR = 0.92 + 72.0 * li_thickness + topology_bonus + 0.05 * min(tct, 1.0) - 0.015 * max(0.0, wall_loading - 3.0)
+    # TCT is intentionally excluded here: in this design, it changes stability / edge response,
+    # not the breeding ratio directly.
+    TBR = 0.92 + 72.0 * li_thickness + topology_bonus - 0.015 * max(0.0, wall_loading - 3.0)
     TBR = max(0.0, TBR)
 
     Paux = max(20.0, 72.0 / max(H98, 0.3) + 18.0 * event_severity + 12.0 * r_less_than_1)

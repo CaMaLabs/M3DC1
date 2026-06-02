@@ -1,0 +1,6 @@
+candidate_id,case_name,timestamp,extraction_status,failure_reason
+Candidate-0,baseline,2026-06-01T17:21:27.344730,exception,cannot access local variable 'physics_result' where it is not associated with a value
+Candidate-0,weak_tct,2026-06-01T17:21:27.347952,exception,cannot access local variable 'physics_result' where it is not associated with a value
+Candidate-0,moderate_tct,2026-06-01T17:21:27.350671,exception,cannot access local variable 'physics_result' where it is not associated with a value
+Candidate-0,aggressive_tct,2026-06-01T17:21:27.353335,exception,cannot access local variable 'physics_result' where it is not associated with a value
+Candidate-0,aggressive_tct_li_current,2026-06-01T17:21:27.355869,exception,cannot access local variable 'physics_result' where it is not associated with a value

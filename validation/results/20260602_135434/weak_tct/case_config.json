@@ -1,0 +1,41 @@
+{
+  "candidate_name": "Candidate-0",
+  "blanket_topology": "be_outer_killer",
+  "active_tct": true,
+  "lithium_current_enabled": true,
+  "liquid_lithium_wall": true,
+  "validation_status": "frozen_for_m3dc1",
+  "notes": "Canonical validation target exported from Fusion_Blanket_Design_TCT evolutionary search workflow.",
+  "reactor": {
+    "R_m": 5.5,
+    "a_m": 1.8,
+    "B0_T": 7.2,
+    "Ip_MA": 14.0,
+    "kappa": 1.9,
+    "triangularity": 0.35
+  },
+  "plasma": {
+    "H98": 1.35,
+    "greenwald_fraction": 0.83,
+    "target_betaN": 2.7
+  },
+  "wall": {
+    "lithium_thickness_m": 0.0014,
+    "lithium_velocity_m_s": 2.2,
+    "lithium_current_proxy": 0.0
+  },
+  "tct_translation": {
+    "mode": "current_profile_broadening_proxy",
+    "control_strength": 0.2,
+    "upstream_factor": 0.75,
+    "edge_resistivity_modifier": 0.15
+  },
+  "campaign_matrix": [
+    "baseline",
+    "weak_tct",
+    "moderate_tct",
+    "aggressive_tct",
+    "aggressive_tct_li_current"
+  ],
+  "case_name": "weak_tct"
+}

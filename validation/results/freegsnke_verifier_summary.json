@@ -1,0 +1,23 @@
+{
+  "repo": "/root/work/freegsnke",
+  "python": "/root/work/.venv/bin/python",
+  "cwd": "/root/work/freegsnke",
+  "command": [
+    "/root/work/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "freegsnke/tests/test_inverse_static_solver.py",
+    "freegsnke/tests/test_implicit_euler.py",
+    "freegsnke/tests/test_static_solver.py"
+  ],
+  "returncode": 0,
+  "stdout": "...                                                                      [100%]\n3 passed in 34.11s\n",
+  "stderr": "",
+  "tests": [
+    "freegsnke/tests/test_inverse_static_solver.py",
+    "freegsnke/tests/test_implicit_euler.py",
+    "freegsnke/tests/test_static_solver.py"
+  ],
+  "numba_disable_jit": true
+}

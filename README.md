@@ -103,6 +103,23 @@ validation/generated/candidate0_physics_results.csv
 
 The generated files bridge the fusion/TCT optimizer concept into a controlled M3D-C1 validation campaign.
 
+For open-source verification targets that complement the M3D-C1 smoke cases, see:
+
+- [`validation/open_source_verification_matrix.md`](validation/open_source_verification_matrix.md)
+- [`validation/helical_author_map.md`](validation/helical_author_map.md)
+- [`validation/helical_benchmark_note.md`](validation/helical_benchmark_note.md)
+- [`scripts/run_freegsnke_verifier.py`](scripts/run_freegsnke_verifier.py)
+
+The current helical benchmark proxy artifact is written here:
+
+- [`validation/generated/helical_benchmark_proxy/C1.h5`](validation/generated/helical_benchmark_proxy/C1.h5)
+
+It is a source-inspired reconstruction, not the hidden PPPL `helical5g` or
+`helical5f` file. The file carries explicit proxy metadata so the reconstructed
+TBR gate can be traced back to the benchmark assumptions instead of the
+validator. In this harness, TCT affects stability and edge-response proxies,
+not TBR directly.
+
 ## Physics harness boundary
 
 `validation/physics_engine.py` is the current validation engine layer. It is **not** a replacement for the compiled M3D-C1 solver. It provides:
@@ -131,6 +148,25 @@ Then run:
 
 ```bash
 python3 validation/physics_engine.py --backend-dir path/to/backend_diagnostics
+```
+
+The smoke runner also accepts a backend diagnostics directory:
+
+```bash
+M3DC1_BACKEND_DIR=path/to/backend_diagnostics bash scripts/run_first_smoke_tests.sh
+```
+
+If you have raw M3D-C1 HDF5 output instead, point the runner at the case
+directories and let it generate backend JSON first:
+
+```bash
+M3DC1_H5_DIR=path/to/m3dc1_runs bash scripts/run_first_smoke_tests.sh
+```
+
+The FreeGSNKE open-source verifier can also be run directly:
+
+```bash
+python3 scripts/run_freegsnke_verifier.py
 ```
 
 Recognized backend physics fields include:

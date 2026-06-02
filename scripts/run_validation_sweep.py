@@ -28,6 +28,8 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent / "validation"))
 
 from physics_extractor import PhysicsExtractionResult, extract_physics_for_case
+from physics_engine import evaluate_case as evaluate_backend_case
+from physics_engine import asdict as backend_asdict
 
 
 # Setup logging
@@ -41,9 +43,10 @@ logger = logging.getLogger(__name__)
 class ValidationSweep:
     """Orchestrator for validation sweep campaign."""
     
-    def __init__(self, candidate_file: Path, output_base_dir: Path):
+    def __init__(self, candidate_file: Path, output_base_dir: Path, backend_dir: Path | None = None):
         self.candidate_file = Path(candidate_file)
         self.output_base_dir = Path(output_base_dir)
+        self.backend_dir = Path(backend_dir) if backend_dir is not None else None
         self.output_base_dir.mkdir(parents=True, exist_ok=True)
         
         # Timestamp for this sweep
@@ -129,43 +132,56 @@ class ValidationSweep:
         with open(case_output_dir / "case_config.json", 'w') as f:
             json.dump(case, f, indent=2)
         
-        # 1. Run M3D-C1 (placeholder - in real use, call the binary)
-        logger.info(f"[{case_name}] Running M3D-C1 backend...")
-        backend_ok = self._run_backend(case, case_output_dir)
-        result["backend_returncode"] = 0 if backend_ok else 1
-        
-        # 2. Extract physics
-        logger.info(f"[{case_name}] Extracting physics...")
-        physics_result = extract_physics_for_case(case_name, case_output_dir)
-        
-        # Dump extracted values before any constraints
-        result["extraction_status"] = physics_result.extraction_status
-        result["failure_reason"] = physics_result.failure_reason
-        result["warnings"] = " | ".join(physics_result.warnings)
-        
-        # Raw physics (before constraints)
-        raw_physics = physics_result.to_dict()
-        result.update({
-            f"raw_{k}": v for k, v in raw_physics.items()
-        })
-        
-        # 3. Apply constraints (placeholder)
-        logger.info(f"[{case_name}] Applying constraints...")
-        constrained_physics = self._apply_constraints(physics_result, case)
-        result.update({
-            f"final_{k}": v for k, v in constrained_physics.items()
-        })
-        
-        # 4. Compute score
-        logger.info(f"[{case_name}] Computing score...")
-        score = self._compute_score(physics_result, case)
-        result["score"] = score
-        
+        if self.backend_dir is not None:
+            logger.info(f"[{case_name}] Evaluating backend diagnostics from {self.backend_dir}...")
+            backend_result = evaluate_backend_case(case, self.backend_dir)
+            backend_dict = backend_asdict(backend_result)
+            result.update(backend_dict)
+            result["backend_returncode"] = int(backend_dict.get("backend_returncode", 0))
+            result["extraction_status"] = backend_dict.get("status")
+            result["failure_reason"] = backend_dict.get("failure_reason")
+            result["warnings"] = ""
+            result["score"] = backend_dict.get("score", 0.0)
+        else:
+            # 1. Run M3D-C1 (placeholder - in real use, call the binary)
+            logger.info(f"[{case_name}] Running M3D-C1 backend...")
+            backend_ok = self._run_backend(case, case_output_dir)
+            result["backend_returncode"] = 0 if backend_ok else 1
+
+            # 2. Extract physics
+            logger.info(f"[{case_name}] Extracting physics...")
+            physics_result = extract_physics_for_case(case_name, case_output_dir)
+
+            # Dump extracted values before any constraints
+            result["extraction_status"] = physics_result.extraction_status
+            result["failure_reason"] = physics_result.failure_reason
+            result["warnings"] = " | ".join(physics_result.warnings)
+
+            # Raw physics (before constraints)
+            raw_physics = physics_result.to_dict()
+            result.update({
+                f"raw_{k}": v for k, v in raw_physics.items()
+            })
+
+            # 3. Apply constraints (placeholder)
+            logger.info(f"[{case_name}] Applying constraints...")
+            constrained_physics = self._apply_constraints(physics_result, case)
+            result.update({
+                f"final_{k}": v for k, v in constrained_physics.items()
+            })
+
+            # 4. Compute score
+            logger.info(f"[{case_name}] Computing score...")
+            score = self._compute_score(physics_result, case)
+            result["score"] = score
+
         # 5. Store key config parameters
         result.update(self._extract_config_params(case))
         
-        logger.info(f"[{case_name}] Case complete: status={physics_result.extraction_status}, score={score}")
-        
+        logger.info(
+            f"[{case_name}] Case complete: status={result.get('extraction_status')}, score={result.get('score')}"
+        )
+
         return result
     
     def _run_backend(self, case: Dict[str, Any], output_dir: Path) -> bool:
@@ -374,6 +390,12 @@ def main():
         default=Path(__file__).parent.parent / "validation" / "results",
         help="Base output directory for sweep results"
     )
+    parser.add_argument(
+        "--backend-dir",
+        type=Path,
+        default=None,
+        help="Optional backend diagnostics directory with per-case JSON files"
+    )
     
     args = parser.parse_args()
     
@@ -383,7 +405,7 @@ def main():
         return 1
     
     # Run sweep
-    sweep = ValidationSweep(args.candidate, args.output_dir)
+    sweep = ValidationSweep(args.candidate, args.output_dir, backend_dir=args.backend_dir)
     try:
         csv_path = sweep.run_sweep()
         logger.info(f"SUCCESS: Results at {csv_path}")

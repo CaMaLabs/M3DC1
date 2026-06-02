@@ -1,0 +1,6 @@
+case_name,tct_strength,li_current,B0_T,Ip_MA,H98,greenwald_fraction
+baseline,0.0,0.0,7.2,14.0,1.35,0.83
+weak_tct,0.2,0.0,7.2,14.0,1.35,0.83
+moderate_tct,0.5,0.05,7.2,14.0,1.35,0.83
+aggressive_tct,0.8,0.0,7.2,14.0,1.35,0.83
+aggressive_tct_li_current,0.8,0.1,7.2,14.0,1.35,0.83
