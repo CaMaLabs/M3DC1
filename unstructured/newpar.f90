@@ -22,6 +22,7 @@ Program Reducedquintic
   use m3dc1_omp
   use restart_hdf5
   use wall
+  use resistive_wall, only: eta_wall, eta_wallRZ
   use geometry 
   use neutral_beam
   use kprad_m3dc1
@@ -213,7 +214,11 @@ Program Reducedquintic
   if(myrank.eq.0 .and. iprint.ge.1) print *, ' Generating newvar matrices'
   call create_newvar_matrices
 
-  call calc_wall_dist
+  if (eta_wall .gt. 0.0 .or. eta_wallRZ .gt. 0.0) then
+     call calc_wall_dist
+  else
+     if (myrank.eq.0 .and. iprint.ge.1) print *, ' Skipping wall distance solve'
+  end if
 
   ! Set initial conditions either from restart file
   ! or from initialization routine
@@ -855,9 +860,15 @@ endif
   !   toroidal current
   if(myrank.eq.0 .and. iprint.ge.2) print *, "  toroidal current"
   if(inocurrent_tor.eq.1) then
-     call solve_newvar1(mass_mat_lhs_dc,jphi_field,gs_mat_rhs_dc, &
-          psi_field(ilin))
+     if(ilin.eq.0) then
+        if(myrank.eq.0) print *, "derived_quantities: solve jphi_field from gs_mat_rhs_dc, ilin=", ilin
+        call solve_newvar1(mass_mat_lhs_dc,jphi_field,gs_mat_rhs_dc, &
+             psi_field(ilin))
+     else
+        if(myrank.eq.0) print *, "derived_quantities: skip repeated jphi solve, ilin=", ilin
+     endif
   else
+     if(myrank.eq.0) print *, "derived_quantities: solve jphi_field from gs_mat_rhs, ilin=", ilin
      call solve_newvar1(mass_mat_lhs,jphi_field,gs_mat_rhs, &
           psi_field(ilin))
   endif
@@ -867,7 +878,7 @@ endif
   !if(imp_bf.eq.0 .or. ilin.eq.0 .or. ntime.eq.0) then
      if((i3d.eq.1 .or. ifout.eq.1) .and. numvar.ge.2) then
         if(myrank.eq.0 .and. iprint.ge.2) print *, "  f", ilin
-        if((ilin.eq.0 .and. eqsubtract.eq.1) &
+     if((ilin.eq.0 .and. eqsubtract.eq.1) &
             .or. eqsubtract.eq.0) then
            if(itor.eq.0) then
               temp = bzero
@@ -876,6 +887,7 @@ endif
            end if
            call add(bz_field(ilin),-temp)
         endif
+        if(myrank.eq.0) print *, "derived_quantities: solve bf_field, ilin=", ilin
         call solve_newvar1(bf_mat_lhs,bf_field(ilin),mass_mat_rhs_bf, &
              bz_field(ilin), bf_field(ilin))
         if((ilin.eq.0 .and. eqsubtract.eq.1) &
@@ -889,13 +901,16 @@ endif
         if(myrank.eq.0 .and. iprint.ge.2) print *, "  fp", ilin
         ! solve fp = df/dphi when restarting absent fp 
         if(irestart_fp.eq.0 .and. ntime.eq.ntime0) then 
+           if(myrank.eq.0) print *, "derived_quantities: solve bfp_field from bf_field, ilin=", ilin
            call solve_newvar1(mass_mat_lhs,bfp_field(ilin),dp_mat_rhs_bfp, &
                bf_field(ilin))
            if(extsubtract.eq.1) then ! also, external bfp
+              if(myrank.eq.0) print *, "derived_quantities: solve bfp_ext from bf_ext, ilin=", ilin
               call solve_newvar1(mass_mat_lhs,bfp_ext,dp_mat_rhs_bfp, &
                   bf_ext)
            endif
         else 
+           if(myrank.eq.0) print *, "derived_quantities: solve bfp_field from bz_field, ilin=", ilin
            call solve_newvar1(bf_mat_lhs,bfp_field(ilin),dp_mat_rhs_bfp, &
                 bz_field(ilin), bfp_field(ilin))
         endif

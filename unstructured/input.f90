@@ -135,7 +135,6 @@ subroutine set_defaults
   use neutral_beam
   use element
   use pellet
-  use mesh_mod
   use vector_mod
   use gradshafranov
   use adapt
@@ -1339,7 +1338,6 @@ end subroutine set_defaults
 
 subroutine validate_input
   use basic
-  use mesh_mod
   use m3dc1_nint
   use transport_coefficients
   use neutral_beam

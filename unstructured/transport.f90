@@ -2010,32 +2010,33 @@ subroutine define_transport_coefficients()
      solve_invAspectRatio   = temp2(27).eq.1
   end if
 
-  if(myrank.eq.0 .and. iprint.ge.1) print *, ' solving...'
+  if(imp_temp.eq.0) then
+     if(myrank.eq.0 .and. iprint.ge.1) print *, ' solving...'
 
-  if(solve_resistivity) then
-     if(myrank.eq.0 .and. iprint.ge.1) print *, '  resistivity'
-     call newvar_solve(resistivity_field%vec, mass_mat_lhs)
-  end if
+     if(solve_resistivity) then
+        if(myrank.eq.0 .and. iprint.ge.1) print *, '  resistivity'
+        call newvar_solve(resistivity_field%vec, mass_mat_lhs)
+     end if
 
-  if(solve_kappa) then
-     if(myrank.eq.0 .and. iprint.ge.1) print *, '  kappa'
-     call newvar_solve(kappa_field%vec, mass_mat_lhs)
-  endif
+     if(solve_kappa) then
+        if(myrank.eq.0 .and. iprint.ge.1) print *, '  kappa'
+        call newvar_solve(kappa_field%vec, mass_mat_lhs)
+     endif
 
-  if(solve_kappar) then
-     if(myrank.eq.0 .and. iprint.ge.1) print *, '  kappar'
-     call newvar_solve(kappar_field%vec, mass_mat_lhs)
-  endif
+     if(solve_kappar) then
+        if(myrank.eq.0 .and. iprint.ge.1) print *, '  kappar'
+        call newvar_solve(kappar_field%vec, mass_mat_lhs)
+     endif
 
-  if(solve_denm) then
-     if(myrank.eq.0 .and. iprint.ge.1) print *, '  denm'
-     call newvar_solve(denm_field%vec, mass_mat_lhs)
-  endif
+     if(solve_denm) then
+        if(myrank.eq.0 .and. iprint.ge.1) print *, '  denm'
+        call newvar_solve(denm_field%vec, mass_mat_lhs)
+     endif
 
-  if(solve_sigma) then
-     if(myrank.eq.0 .and. iprint.ge.1) print *, '  sigma'
-     call newvar_solve(sigma_field%vec, mass_mat_lhs_dc)
-  endif
+     if(solve_sigma) then
+        if(myrank.eq.0 .and. iprint.ge.1) print *, '  sigma'
+        call newvar_solve(sigma_field%vec, mass_mat_lhs_dc)
+     endif
 
   if(solve_visc) then
      if(myrank.eq.0 .and. iprint.ge.1) print *, '  viscosity'
@@ -2146,9 +2147,10 @@ subroutine define_transport_coefficients()
    call newvar_solve(Jbs_qR_field%vec, mass_mat_lhs)
   endif
 
-  if(solve_invAspectRatio) then
-   if(myrank.eq.0 .and. iprint.ge.1) print *, '  Jbs_invAspectRatio'
-   call newvar_solve(Jbs_invAspectRatio_field%vec, mass_mat_lhs)
+     if(solve_invAspectRatio) then
+      if(myrank.eq.0 .and. iprint.ge.1) print *, '  Jbs_invAspectRatio'
+      call newvar_solve(Jbs_invAspectRatio_field%vec, mass_mat_lhs)
+     endif
   endif
   ! the "compressible" viscosity is the same as the "incompressible"
   ! viscosity up to a constant

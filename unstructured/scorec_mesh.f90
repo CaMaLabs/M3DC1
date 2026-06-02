@@ -56,6 +56,10 @@ module scorec_mesh_mod
   character(len=50) :: preconditioner = "ilu"
   character(len=50) :: sub_dom_solver = "ilu"
 
+  private :: graph_fill, solver_type, num_iter, subdomain_overlap, poly_ord
+  private :: solver_tol, ilu_drop_tol, ilu_fill, ilu_omega
+  private :: krylov_solver, preconditioner, sub_dom_solver
+
   integer, dimension (:), allocatable :: nodes_owned
   integer, dimension(:), allocatable, target :: ghost_nodes_cache
   integer :: num_ghost_nodes_cache = -1

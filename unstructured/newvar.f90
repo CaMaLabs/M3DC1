@@ -171,7 +171,8 @@ end subroutine apply_bc
 
   implicit none
 
-  type(newvar_matrix), intent(out) :: mat
+    ! Preserve the pre-assigned matrix index from set_newvar_indices.
+    type(newvar_matrix), intent(inout) :: mat
   integer, intent(in) :: ibound
   integer, intent(in) :: itype
   integer, intent(in) :: is_lhs
@@ -377,6 +378,7 @@ end subroutine solve_newvar_axby
 subroutine solve_newvar1(lhsmat, fout, rhsmat, fin, bvec)
 
   use field
+  use basic
 
   implicit none
 
@@ -388,11 +390,24 @@ subroutine solve_newvar1(lhsmat, fout, rhsmat, fin, bvec)
   type(field_type), target :: temp_in, temp_out
   type(vector_type), pointer :: bptr, ptrin, ptrout
 
+  if(myrank.eq.0) then
+     write(*,'(A, I0, A, I0, A, I0, A, I0)') &
+          '[M3DC1 DEBUG] solve_newvar1 lhs=', lhsmat%mat%imatrix, &
+          ' rhs=', rhsmat%mat%imatrix, &
+          ' fin_isize=', fin%vec%isize, &
+          ' fout_isize=', fout%vec%isize
+  end if
+
   ! if inarray is bigger than vecsize=1, then 
   ! create vecsize=1 for matrix multiplication
   if(fin%vec%isize.gt.1) then
      call create_field(temp_in)
      temp_in = fin
+     if(myrank.eq.0) then
+        write(*,'(A, I0, A, I0)') &
+             '[M3DC1 DEBUG] solve_newvar1 temp_in field=', temp_in%vec%id, &
+             ' isize=', temp_in%vec%isize
+     end if
      ptrin => temp_in%vec
   else
      ptrin => fin%vec
@@ -401,6 +416,11 @@ subroutine solve_newvar1(lhsmat, fout, rhsmat, fin, bvec)
   if(fout%vec%isize.gt.1) then
      call create_field(temp_out)
      temp_out = fout
+     if(myrank.eq.0) then
+        write(*,'(A, I0, A, I0)') &
+             '[M3DC1 DEBUG] solve_newvar1 temp_out field=', temp_out%vec%id, &
+             ' isize=', temp_out%vec%isize
+     end if
      ptrout => temp_out%vec
   else
      ptrout => fout%vec

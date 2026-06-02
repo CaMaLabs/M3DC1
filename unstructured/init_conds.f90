@@ -704,13 +704,17 @@ subroutine initial_conditions()
   ! calculate equilibrium and perturbed ne and temperature profiles
   call calculate_ne(0, den_field(0), ne_field(0), 1)
   call calculate_ne(1, den_field(1), ne_field(1), 1)
-  call calculate_temperatures(0, te_field(0), ti_field(0), &
-       pe_field(0), p_field(0), ne_field(0), den_field(0), &
-       1)
-  ! the first '0' below is intentional and not a typo! --YZ
-  call calculate_temperatures(0, te_field(1), ti_field(1), &
-       pe_field(1), p_field(1), ne_field(1), den_field(1), &
-       1)
+  if(imp_temp.eq.0) then
+     call calculate_temperatures(0, te_field(0), ti_field(0), &
+          pe_field(0), p_field(0), ne_field(0), den_field(0), &
+          1)
+     ! the first '0' below is intentional and not a typo! --YZ
+     call calculate_temperatures(0, te_field(1), ti_field(1), &
+          pe_field(1), p_field(1), ne_field(1), den_field(1), &
+          1)
+  else
+     if(myrank.eq.0 .and. iprint.ge.1) print *, ' Skipping temperature reconstruction'
+  end if
 
   call sanitize_temperature_field(te_field(0), pefac*p0/max(den0, 1.0e-12))
   call sanitize_temperature_field(te_field(1), pefac*p0/max(den0, 1.0e-12))

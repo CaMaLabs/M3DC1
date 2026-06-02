@@ -90,7 +90,7 @@ module error_estimate
     use vector_mod
     use m3dc1_nint
     implicit none
-    integer :: itri, numelms,numedgs, iedge, ii, node_next, num_get
+    integer :: itri, numelms,numedgs, iedge, ii, node_next, num_get, rc
     vectype, dimension(:,:), intent(out) :: edge_error
     integer, dimension(3) :: edges, nodes, nodes_edge, edge_dir, idimgeo, idimgeo_t, is_bdy
     real, dimension(3) :: edge_len
@@ -99,7 +99,7 @@ module error_estimate
     integer, allocatable :: edge_tag(:)
     type(element_data) :: d
     integer :: ifaczonedim, ifaczone, icylinder
-    call m3dc1_mesh_getnument(1, numedgs)
+    rc = m3dc1_mesh_getnument(1, numedgs)
 
     icylinder = itor
     allocate(edge_jump(npoint_int, numedgs, NUMTERM))

@@ -18,6 +18,8 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+option(ENABLE_PCU_SHIM "Build with a minimal PCU shim for single-rank smoke tests" OFF)
+
 # set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")
 # if(BUILD_SHARED_LIBS)
   # set(CMAKE_FIND_LIBRARY_SUFFIXES ".so" ".a")
@@ -123,11 +125,13 @@ set(SOURCES
     runaway_advection.f90
     time_step_split.f90
     time_step_unsplit.f90
+    signal_handler.f90
     hdf5_output.f90
     particle.f90
     time_step.f90
     output.f90
     restart_hdf5.f90
+    hdf5_mpio_stubs.f90
     error_estimate.f90
     adapt.f90
     input.f90
@@ -141,6 +145,10 @@ set(SOURCES
     )
 
 set(BIN_NAME m3dc1)
+
+if(ENABLE_PCU_SHIM)
+  list(APPEND SOURCES pcu_shim.c)
+endif()
 
 # find_package(PETSc)
 # if(PETSC_FOUND AND USEPETSC)
@@ -423,11 +431,12 @@ endif()
 add_executable(${BIN_NAME} ${SOURCES})
 # set_target_properties(${BIN_NAME} PROPERTIES Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${BIN_NAME}_mods)
 set_property(TARGET ${BIN_NAME} PROPERTY LINKER_LANGUAGE Fortran)
-target_include_directories(${BIN_NAME} PRIVATE ${SCOREC_INCLUDE_DIRS})
+target_include_directories(${BIN_NAME} PRIVATE ${SCOREC_INCLUDE_DIRS} /usr/include/superlu-dist)
+target_link_directories(${BIN_NAME} PRIVATE /root/m3dc1-scorec-mpich-install/lib /usr/lib/aarch64-linux-gnu/hdf5/serial)
 target_link_libraries(${BIN_NAME} PRIVATE PkgConfig::NETCDF-Fortran PkgConfig::NETCDF
   ${HDF5_HL_LIBRARIES} ${HDF5_LIBRARIES}
  # netCDF::netcdff
-  ${M3DC1_SCOREC_LIB_NAME} ${SCOREC_LIBRARIES} ${ZOLTAN_LIBRARIES}
+  ${M3DC1_SCOREC_LIB_NAME} ${SCOREC_LIBRARIES} /root/scorec-mpich-install/lib/libapf_metis.a ${ZOLTAN_LIBRARIES}
   PkgConfig::PETSC PkgConfig::FFTW PkgConfig::GSL MPI::MPI_Fortran stdc++)
 # target_link_directories(m3dc1_2d ${PETSC_STATIC_LIBRARY_DIRECTORIES})
 target_compile_definitions(${BIN_NAME} PRIVATE ${DEFS})
@@ -482,6 +491,3 @@ endif()
 #target_compile_definitions(a2cc PUBLIC ${DEFS})
 
 #add_executable(kprad kprad.f90 kprad_test.f90)
-
-
-

@@ -826,6 +826,7 @@ module m3dc1_vel_prof
       use petscksp
 #else
 #include <petsc/finclude/petscsysdef.h>
+      use petscsys
 #endif
       implicit none
       PetscLogStage  stageA,stageS

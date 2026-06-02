@@ -1040,7 +1040,9 @@ int matrix_solve::setKspType(Vec *b, Vec *x)
     // petsc-3.8.3 and older
     ierr=PCFactorSetMatSolverPackage(pc,MATSOLVERSUPERLU_DIST);
 #else
-    ierr=PCFactorSetMatSolverType(pc,MATSOLVERSUPERLU_DIST);
+    // Use PETSc's built-in factorization backend here. The original
+    // superlu_dist choice is not available in this environment.
+    ierr=PCFactorSetMatSolverType(pc,MATSOLVERPETSC);
 #endif
     CHKERRQ(ierr);
   }

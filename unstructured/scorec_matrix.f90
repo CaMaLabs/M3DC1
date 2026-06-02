@@ -768,12 +768,12 @@ contains
     call m3dc1_field_getnumglobaldof(ivec, num_global_dof_f)
     call m3dc1_field_getnumghostdof(ivec, num_ghost_dof_f)
 
-    call m3dc1_mesh_getnument(0, num_local_ent)
+    ierr = m3dc1_mesh_getnument(0, num_local_ent)
     call m3dc1_mesh_getnumownent(0, num_own_ent)
     call m3dc1_mesh_getnumglobalent(0, num_global_ent)
     call m3dc1_mesh_getnumghostent(0, num_ghost_ent)
 
-    call m3dc1_mesh_getnument(3, num_local_elements)
+    ierr = m3dc1_mesh_getnument(3, num_local_elements)
     call m3dc1_mesh_getnumglobalent(3, num_global_elements)
 
     call mpi_allreduce(num_local_elements, tot_elms, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)  

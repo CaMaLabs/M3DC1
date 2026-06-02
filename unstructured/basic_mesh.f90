@@ -1,5 +1,9 @@
 module basic_mesh_mod
   use element
+  use petscmatdef
+  use petscisdef
+  use petscaodef
+  use petscsysdef
 
   implicit none
 

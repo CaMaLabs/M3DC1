@@ -1,5 +1,6 @@
 module petsc_vector_mod
   use petsc
+  use petscvecdef
 
   implicit none
 

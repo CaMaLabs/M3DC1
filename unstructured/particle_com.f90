@@ -4462,7 +4462,7 @@ subroutine set_density
   call destroy_field(p_v)
 
   call calculate_ne(1, den_field(1), ne_field(1), eqsubtract)
-  if(itemp.eq.0 .and. (numvar.eq.3 .or. ipres.gt.0)) then
+  if(itemp.eq.0 .and. (numvar.eq.3 .or. ipres.gt.0) .and. imp_temp.eq.0) then
      call calculate_temperatures(1, te_field(1), ti_field(1), &
           pe_field(1), p_field(1), ne_field(1), den_field(1), eqsubtract)
   else

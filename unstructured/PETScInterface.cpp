@@ -304,7 +304,11 @@ int solve2_(int *matrixId, double * rhs_sol, int * valType, int * ier)
 
      /* Step 4 */
      ierr = KSPGetPC((ksp_array[whichMatrix].ksp),&pc); CHKERRQ(ierr);
+     ierr = PCFactorSetMatSolverType(pc, MATSOLVERPETSC); CHKERRQ(ierr);
      ierr = KSPSetFromOptions((ksp_array[whichMatrix].ksp)); CHKERRQ(ierr);
+     ierr = KSPGetPC((ksp_array[whichMatrix].ksp),&pc); CHKERRQ(ierr);
+     ierr = PCSetType(pc, PCLU); CHKERRQ(ierr);
+     ierr = PCFactorSetMatSolverType(pc, MATSOLVERPETSC); CHKERRQ(ierr);
   } // end of if(!(ksp_array[whichMatrix].same_pc_count))
   
   if(flag==1) {

@@ -1237,8 +1237,18 @@ subroutine calculate_scalars()
     if(psi0.ne.psi0) psi0 = 0.
 
 #ifdef USE3D
-  if(ike_harmonics .gt. 0) call calculate_ke()
-  if(ibh_harmonics .gt. 0) call calculate_bh()
+  if(myrank.eq.0 .and. iprint.ge.1) then
+     write(*,'(A, I0, A, I0)') '[M3DC1 DEBUG] diagnostics gate ike_harmonics=', &
+          ike_harmonics, ' ibh_harmonics=', ibh_harmonics
+  end if
+  if(ike_harmonics .gt. 0) then
+     if(myrank.eq.0) print *, '[M3DC1 DEBUG] entering calculate_ke()'
+     call calculate_ke()
+  endif
+  if(ibh_harmonics .gt. 0) then
+     if(myrank.eq.0) print *, '[M3DC1 DEBUG] entering calculate_bh()'
+     call calculate_bh()
+  endif
 #endif
 
   call evaluate_mag_probes

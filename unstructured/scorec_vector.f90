@@ -508,6 +508,7 @@ contains
 #ifdef USECOMPLEX
     dataType = 1
 #endif
+    write(*,*) '[M3DC1 DEBUG] create_vector id=', f%id, ' name=', trim(field_name)
     call m3dc1_field_create (f%id, trim(field_name), n, dataType, dofs_per_node);
     f%isize = n
   end subroutine scorec_vector_create

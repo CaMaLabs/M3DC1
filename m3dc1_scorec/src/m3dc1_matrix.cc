@@ -60,6 +60,45 @@ void printMemStat() {
       << PCU_Comm_Self() << " current " << mem / 1e6 << std::endl;
 }
 
+static void repair_near_zero_diagonal_rows(Mat A, PetscInt matrix_id) {
+  PetscInt rstart = 0, rend = 0;
+  PetscErrorCode ierr = MatGetOwnershipRange(A, &rstart, &rend);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+
+  Vec diagvec;
+  ierr = MatCreateVecs(A, &diagvec, NULL);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+  ierr = MatGetDiagonal(A, diagvec);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+
+  const PetscScalar *diagvals = NULL;
+  ierr = VecGetArrayRead(diagvec, &diagvals);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+
+  for (PetscInt row = rstart; row < rend; ++row) {
+    const PetscScalar diag = diagvals[row - rstart];
+    if (std::abs(PetscRealPart(diag)) + std::abs(PetscImaginaryPart(diag)) <
+        1e-12) {
+      ierr = MatSetValue(A, row, row, 1.0, INSERT_VALUES);
+      CHKERRABORT(PETSC_COMM_WORLD, ierr);
+      if (!PCU_Comm_Self()) {
+        std::cout << "[M3DC1 DEBUG] assemble: matrix " << matrix_id
+                  << " regularized near-zero diagonal row " << (row + 1)
+                  << std::endl;
+      }
+    }
+  }
+
+  ierr = VecRestoreArrayRead(diagvec, &diagvals);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+  ierr = VecDestroy(&diagvec);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+  ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+  ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY);
+  CHKERRABORT(PETSC_COMM_WORLD, ierr);
+}
+
 int copyField2PetscVec_5(FieldID field_id, Vec petscVec, int scalar_type)
 {
   int num_own_ent= m3dc1_mesh::instance()->num_own_ent[0];
@@ -1249,6 +1288,10 @@ int matrix_solve::assemble() {
   ierr = MatAssemblyEnd(_A, MAT_FINAL_ASSEMBLY);
   CHKERRQ(ierr);
 
+  if (mymatrix_id == 22 || mymatrix_id == 23) {
+    repair_near_zero_diagonal_rows(_A, mymatrix_id);
+  }
+
   // clean up auxiliary data
   remotePidOwned->clear();
   remoteNodeRow->clear();
@@ -1290,6 +1333,18 @@ int matrix_solve::set_row(int row, int numVals, int *columns, double *vals) {
 int matrix_solve::solve(FieldID field_id) {
   Vec x, b;
   int ierr;
+  if (!PCU_Comm_Self()) {
+    char field_name[FIXSIZEBUFF];
+    char rhs_name[FIXSIZEBUFF];
+    int num_values, value_type, total_num_dof;
+    m3dc1_field_getinfo(&fieldOrdering, field_name, &num_values, &value_type,
+                        &total_num_dof);
+    m3dc1_field_getinfo(&field_id, rhs_name, &num_values, &value_type,
+                        &total_num_dof);
+    std::cout << "[M3DC1 DEBUG] " << __func__ << ": matrix " << mymatrix_id
+              << " fieldOrdering=" << field_name << " rhs=" << rhs_name
+              << " field_id=" << field_id << std::endl;
+  }
   ierr=MatCreateVecs(_A, &x, &b);
   copyField2PetscVec_5(field_id, b, get_scalar_type());
   //int ierr;= VecDuplicate(b, &x);
@@ -1302,6 +1357,43 @@ int matrix_solve::solve(FieldID field_id) {
     CHKERRQ(ierr);
     if (!PCU_Comm_Self())
       std::cout << "\t-- Update A, Reuse Preconditioner" << std::endl;
+  }
+
+  if (!PCU_Comm_Self() && mymatrix_id == 22) {
+    KSPType ksptype = NULL;
+    PCType pctype = NULL;
+    MatSolverType stype = NULL;
+    PC pc;
+    ierr = KSPGetType(_ksp, &ksptype);
+    CHKERRQ(ierr);
+    ierr = KSPGetPC(_ksp, &pc);
+    CHKERRQ(ierr);
+    ierr = PCGetType(pc, &pctype);
+    CHKERRQ(ierr);
+    ierr = PCFactorGetMatSolverType(pc, &stype);
+    CHKERRQ(ierr);
+    std::cout << "[M3DC1 DEBUG] " << __func__ << ": matrix " << mymatrix_id
+              << " ksp=" << (ksptype ? ksptype : "(null)")
+              << " pc=" << (pctype ? pctype : "(null)")
+              << " solver=" << (stype ? stype : "(null)") << std::endl;
+  }
+  if (!PCU_Comm_Self() && (mymatrix_id == 22 || mymatrix_id == 23)) {
+    PetscInt ncols = 0;
+    const PetscInt *cols = NULL;
+    const PetscScalar *vals = NULL;
+    PetscErrorCode row_ierr = MatGetRow(_A, 1, &ncols, &cols, &vals);
+    if (!row_ierr) {
+      std::cout << "[M3DC1 DEBUG] " << __func__ << ": matrix " << mymatrix_id
+                << " row 2 ncols=" << ncols;
+      for (PetscInt i = 0; i < ncols; ++i) {
+        std::cout << " (" << cols[i] << "," << PetscRealPart(vals[i]) << ")";
+      }
+      std::cout << std::endl;
+      MatRestoreRow(_A, 1, &ncols, &cols, &vals);
+    } else {
+      std::cout << "[M3DC1 DEBUG] " << __func__ << ": matrix " << mymatrix_id
+                << " MatGetRow failed for row 2" << std::endl;
+    }
   }
 
   // KSPSetUp(_ksp);
@@ -1418,8 +1510,22 @@ int matrix_solve::setKspType() {
   assert(total_num_dof / num_values ==
          C1TRIDOFNODE * (mesh->getDimension() - 1));
 
-  // if 2D problem use superlu
-  if (mesh->getDimension() == 2) {
+  // The 2D mass matrices used during startup can still be singular or very
+  // ill-conditioned even after diagonal regularization.  Keep them off the
+  // LU/SuperLU_DIST path so initialization can make progress.
+  if (mymatrix_id == 22 || mymatrix_id == 23) {
+    ierr = KSPSetType(_ksp, KSPGMRES);
+    CHKERRQ(ierr);
+    PC pc;
+    ierr = KSPGetPC(_ksp, &pc);
+    CHKERRQ(ierr);
+    ierr = PCSetType(pc, PCJACOBI);
+    CHKERRQ(ierr);
+    if (!PCU_Comm_Self()) {
+      std::cout << "[M3DC1 INFO] " << __func__ << ": matrix " << mymatrix_id
+                << " using GMRES/Jacobi fallback" << std::endl;
+    }
+  } else if (mesh->getDimension() == 2) {
     ierr = KSPSetType(_ksp, KSPPREONLY);
     CHKERRQ(ierr);
     PC pc;
@@ -1427,6 +1533,7 @@ int matrix_solve::setKspType() {
     CHKERRQ(ierr);
     ierr = PCSetType(pc, PCLU);
     CHKERRQ(ierr);
+    // Use the parallel direct solver available in this PETSc build.
     ierr = PCFactorSetMatSolverType(pc, MATSOLVERSUPERLU_DIST);
     CHKERRQ(ierr);
   } else { /* conflict with mg settings, to be fixed later
@@ -1455,6 +1562,23 @@ int matrix_solve::setKspType() {
 
   ierr = KSPSetFromOptions(_ksp);
   CHKERRQ(ierr);
+  if (mymatrix_id == 22 || mymatrix_id == 23) {
+    PC pc;
+    ierr = KSPGetPC(_ksp, &pc);
+    CHKERRQ(ierr);
+    ierr = KSPSetType(_ksp, KSPGMRES);
+    CHKERRQ(ierr);
+    ierr = PCSetType(pc, PCJACOBI);
+    CHKERRQ(ierr);
+  } else if (mesh->getDimension() == 2) {
+    PC pc;
+    ierr = KSPGetPC(_ksp, &pc);
+    CHKERRQ(ierr);
+    ierr = PCSetType(pc, PCLU);
+    CHKERRQ(ierr);
+    ierr = PCFactorSetMatSolverType(pc, MATSOLVERSUPERLU_DIST);
+    CHKERRQ(ierr);
+  }
   _kspSet = 1;
   return M3DC1_SUCCESS;
 }

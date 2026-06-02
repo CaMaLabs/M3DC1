@@ -403,6 +403,7 @@ module adapt
   subroutine adapt_by_error
 ! +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     use basic
+    use mpi
     use error_estimate, only: NUMTERM, JUMPU, JUMPPSI, solutionH2Norm, &
       jump_discontinuity, elem_residule
     use basic
@@ -451,7 +452,7 @@ module adapt
     maxPhi = max(abs(max_val(1+(u_g-1)*dofs_per_node)),abs(min_val(1+(u_g-1)*dofs_per_node)))
     maxPs =  max(abs(max_val((psi_g-1)*dofs_per_node)+1),abs(min_val((psi_g-1)*dofs_per_node)+1))
 
-    call m3dc1_mesh_getnument(1, num_edge)
+    ier = m3dc1_mesh_getnument(1, num_edge)
     allocate(edge_error(num_edge, NUMTERM))
     elem_dim = 2
     num_adj=2
@@ -460,13 +461,13 @@ module adapt
       num_adj = 8
     end if
  
-    call m3dc1_mesh_getnument(elem_dim, num_elm)
+    ier = m3dc1_mesh_getnument(elem_dim, num_elm)
 
     allocate(elm_error(num_elm, NUMTERM))
     allocate(elm_error_sum(2,num_elm))
     allocate(elm_error_res(2,num_elm))
     elm_error_res = 0
-    call  m3dc1_mesh_getnument(0, num_node)
+    ier = m3dc1_mesh_getnument(0, num_node)
     allocate(node_error(2,num_node))
     node_error=0.
     edge_error=0.

@@ -2,6 +2,8 @@ module petsc_matrix_mod
 
   use element
   use petsc
+  use petscmatdef
+  use petsckspdef
 
   implicit none
 
@@ -146,8 +148,8 @@ contains
     local_n = n*owned_dofs()
 
     call MatCreateAIJ(PETSC_COMM_WORLD,local_m,local_n,global_m,global_n, &
-         neighbors*dofs_per_node*mat%n, PETSC_NULL_INTEGER_ARRAY, &
-         0, PETSC_NULL_INTEGER_ARRAY, mat%data, ierr)
+         neighbors*dofs_per_node*mat%n, PETSC_NULL_INTEGER, &
+         0, PETSC_NULL_INTEGER, mat%data, ierr)
     ! The analytical stencil estimate is sometimes too small for the
     ! current mesh/input combination. Allow PETSc to grow the pattern
     ! rather than aborting on the first out-of-preallocation entry.
@@ -182,6 +184,9 @@ contains
        call KSPCreate(PETSC_COMM_WORLD,mat%context,ierr)
        call KSPSetOperators(mat%context, mat%data, mat%data, ierr)
        call KSPSetFromOptions(mat%context,ierr)
+       call KSPGetPC(mat%context, pc, ierr)
+       call PCSetType(pc, PCLU, ierr)
+       call PCFactorSetMatSolverType(pc, MATSOLVERPETSC, ierr)
     end if
 
   end subroutine petsc_matrix_create
